@@ -164,14 +164,27 @@ Description NET VAT TOTAL
 VAT 336.04 50.41 386.45
 VAT TOTALS 635.50 50.41 685.91
 ==================================================
-📊 Final output: 69 lines, 1329 characters
-💾 Final text saved to: .\auto_cropped_extracted_text.txt
+📊 Final output: 69 lines, 1333 characters
+💾 Final text saved to: .\data\auto_cropped_extracted_text.txt
+🔧 Calculating average performance stats from all chunks...
 
 📊 Performance Metrics:
-- Image Normalization: 187.80ms
-- Image Load & Encode: 8.45ms
-- API Request & Parse: 29679.78ms
-- Total Execution Time: 29886.42ms
+- Image Normalization: 233.23ms
+- Image Load & Encode: 8.94ms
+- API Request & Parse: 29319.12ms
+- Total Execution Time: 29881.75ms
+
+⚡ Individual Chunk Performance:
+- Chunk 1: 34.79 tok/sec, 692ms TTFT
+- Chunk 2: 34.87 tok/sec, 470ms TTFT
+- Chunk 3: 34.84 tok/sec, 462ms TTFT
+- Chunk 4: 35.20 tok/sec, 465ms TTFT
+
+🎮 LM Studio Performance Stats (Averaged across 4 chunks):
+- Average Tokens/Second: 34.93 tok/sec
+- Average Time to First Token: 522.25ms
+- Average Generation Time: 6730.25ms
+- Stop Reason: eosFound
 ```
 
 *Complete output saved to: `./auto_cropped_extracted_text.txt`*

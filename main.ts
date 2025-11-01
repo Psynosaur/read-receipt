@@ -3,7 +3,9 @@ import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { normalizeImage } from "./image_normalizer.ts";
 
 // Configuration
-const LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions";
+const _LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"; // Legacy OpenAI API
+const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
+const LM_STUDIO_REST_API_URL = "http://localhost:1234/api/v0/chat/completions"; // LM Studio's REST API with stats
 const DEFAULT_MODEL = "llava"; // Change to your preferred model
 
 // Performance metrics
@@ -15,6 +17,101 @@ const timings = {
     total: 0
 };
 
+// GPU performance tracking - collect stats from each run
+interface GPUStats {
+    modelName?: string;
+    modelSize?: string;
+    tokensPerSecond?: number;
+    timeToFirstToken?: number;
+    generationTime?: number;
+    stopReason?: string;
+    draftModel?: string;
+    totalDraftTokensCount?: number;
+    acceptedDraftTokensCount?: number;
+    rejectedDraftTokensCount?: number;
+    ignoredDraftTokensCount?: number;
+    draftAcceptanceRate?: number;
+}
+
+// Collect stats from each chunk run
+const chunkStats: GPUStats[] = [];
+const gpuStats: GPUStats = {};
+
+/**
+ * Collect GPU performance stats from LM Studio v0.3.10 REST API
+ */
+async function collectGPUStats(): Promise<GPUStats> {
+    try {
+        // Get model info from models endpoint
+        const modelsResponse = await fetch(LM_STUDIO_MODELS_URL);
+        let modelInfo = {};
+        
+        if (modelsResponse.ok) {
+            const modelsData = await modelsResponse.json();
+            if (modelsData.data && modelsData.data.length > 0) {
+                const activeModel = modelsData.data[0];
+                modelInfo = {
+                    modelName: activeModel.id || 'Unknown',
+                    modelSize: activeModel.owned_by || 'Unknown size'
+                };
+            }
+        }
+
+        return {
+            ...modelInfo,
+            timestamp: new Date().toISOString()
+        } as GPUStats;
+
+    } catch (error) {
+        console.log("⚠️  Could not collect GPU stats:", error instanceof Error ? error.message : String(error));
+        return {};
+    }
+}
+
+/**
+ * Calculate average performance stats from all chunk runs
+ */
+function calculateAverageStats(stats: GPUStats[]): GPUStats {
+    if (stats.length === 0) return {};
+    
+    const totals = stats.reduce((acc, stat) => {
+        if (stat.tokensPerSecond) acc.tokensPerSecond = (acc.tokensPerSecond || 0) + stat.tokensPerSecond;
+        if (stat.timeToFirstToken) acc.timeToFirstToken = (acc.timeToFirstToken || 0) + stat.timeToFirstToken;
+        if (stat.generationTime) acc.generationTime = (acc.generationTime || 0) + stat.generationTime;
+        if (stat.totalDraftTokensCount) acc.totalDraftTokensCount = (acc.totalDraftTokensCount || 0) + stat.totalDraftTokensCount;
+        if (stat.acceptedDraftTokensCount) acc.acceptedDraftTokensCount = (acc.acceptedDraftTokensCount || 0) + stat.acceptedDraftTokensCount;
+        if (stat.rejectedDraftTokensCount) acc.rejectedDraftTokensCount = (acc.rejectedDraftTokensCount || 0) + stat.rejectedDraftTokensCount;
+        if (stat.ignoredDraftTokensCount) acc.ignoredDraftTokensCount = (acc.ignoredDraftTokensCount || 0) + stat.ignoredDraftTokensCount;
+        return acc;
+    }, {} as Record<string, number>);
+
+    const count = stats.length;
+    const averages: GPUStats = {};
+    
+    if (totals.tokensPerSecond) averages.tokensPerSecond = totals.tokensPerSecond / count;
+    if (totals.timeToFirstToken) averages.timeToFirstToken = totals.timeToFirstToken / count;
+    if (totals.generationTime) averages.generationTime = totals.generationTime / count;
+    if (totals.totalDraftTokensCount) averages.totalDraftTokensCount = Math.round(totals.totalDraftTokensCount / count);
+    if (totals.acceptedDraftTokensCount) averages.acceptedDraftTokensCount = Math.round(totals.acceptedDraftTokensCount / count);
+    if (totals.rejectedDraftTokensCount) averages.rejectedDraftTokensCount = Math.round(totals.rejectedDraftTokensCount / count);
+    if (totals.ignoredDraftTokensCount) averages.ignoredDraftTokensCount = Math.round(totals.ignoredDraftTokensCount / count);
+
+    // Calculate average draft acceptance rate
+    if (averages.totalDraftTokensCount && averages.totalDraftTokensCount > 0 && averages.acceptedDraftTokensCount) {
+        averages.draftAcceptanceRate = (averages.acceptedDraftTokensCount / averages.totalDraftTokensCount) * 100;
+    }
+
+    // Copy non-numeric fields from first stat
+    if (stats[0]) {
+        averages.modelName = stats[0].modelName;
+        averages.modelSize = stats[0].modelSize;
+        averages.stopReason = stats[0].stopReason;
+        averages.draftModel = stats[0].draftModel;
+    }
+
+    return averages;
+}
+
 // Get image path from command line arguments
 const imagePath = Deno.args[0];
 const model = Deno.args[1] || DEFAULT_MODEL;
@@ -24,6 +121,11 @@ if (!imagePath) {
 }
 
 try {
+    // Collect initial GPU stats
+    console.log("🔧 Collecting GPU performance stats...");
+    const initialGPUStats = await collectGPUStats();
+    Object.assign(gpuStats, initialGPUStats);
+    
     // Normalize image first - start timing
     const normalizationStart = performance.now();
     console.log("🎯 Normalizing image to 896x896...");
@@ -33,7 +135,7 @@ try {
         method: 'chunk', // Use chunk
         jpegQuality: 85,
         applyPreprocessing: false, // Apply sharpening, contrast, and threshold
-        sharpeningStrength: 1.0,
+        sharpeningStrength: 1.0, //
         contrastFactor: 1.5,
         thresholdValue: 128,
         chunkOverlap: 100 // This seems to work okay
@@ -85,9 +187,9 @@ Only extract information that is clearly visible and relevant to this receipt tr
             max_tokens: 8192
         };
 
-        // Send request to LM Studio - start timing
+        // Send request to LM Studio REST API to get performance stats - start timing
         const apiStart = performance.now();
-        const response = await fetch(LM_STUDIO_URL, {
+        const response = await fetch(LM_STUDIO_REST_API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -100,9 +202,37 @@ Only extract information that is clearly visible and relevant to this receipt tr
         }
 
         const result = await response.json();
-        timings.apiRequest += performance.now() - apiStart;
+        const apiDuration = performance.now() - apiStart;
+        timings.apiRequest += apiDuration;
 
         const content = result.choices[0].message.content;
+        
+        // Extract performance stats from LM Studio's REST API response
+        if (result.stats) {
+            const stats = result.stats;
+            const chunkStat: GPUStats = {
+                tokensPerSecond: stats.tokens_per_second,
+                timeToFirstToken: stats.time_to_first_token,
+                generationTime: stats.generation_time,
+                stopReason: stats.stop_reason,
+                draftModel: stats.draft_model,
+                totalDraftTokensCount: stats.total_draft_tokens_count,
+                acceptedDraftTokensCount: stats.accepted_draft_tokens_count,
+                rejectedDraftTokensCount: stats.rejected_draft_tokens_count,
+                ignoredDraftTokensCount: stats.ignored_draft_tokens_count
+            };
+            
+            // Calculate draft acceptance rate if speculative decoding is being used
+            if (stats.total_draft_tokens_count > 0) {
+                chunkStat.draftAcceptanceRate = (stats.accepted_draft_tokens_count / stats.total_draft_tokens_count) * 100;
+            }
+            
+            // Store stats for this chunk
+            chunkStats.push(chunkStat);
+            
+            // Log individual chunk performance
+            console.log(`⚡ Chunk ${i + 1} Performance: ${stats.tokens_per_second.toFixed(2)} tok/sec, ${(stats.time_to_first_token * 1000).toFixed(0)}ms TTFT`);
+        }
         
         // Filter out empty or invalid chunks
         if (content.trim() !== "EMPTY_CHUNK" && content.trim().length > 10) {
@@ -124,7 +254,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
         
         console.log("\n📋 Individual Chunk Results:");
         console.log("=" .repeat(50));
-        allResults.forEach((result, index) => {
+        allResults.forEach((_result, index) => {
             console.log(`\n--- Chunk ${index + 1} ---`);
             // console.log(result);
         });
@@ -161,12 +291,82 @@ Only extract information that is clearly visible and relevant to this receipt tr
     // Calculate total time
     timings.total = performance.now() - timings.totalStart;
     
+    // Collect final GPU stats and merge with existing data
+    console.log("🔧 Calculating average performance stats from all chunks...");
+    const finalGPUStats = await collectGPUStats();
+    
+    // Calculate average stats from all chunk runs
+    const averageStats = calculateAverageStats(chunkStats);
+    const combinedGPUStats = { ...gpuStats, ...finalGPUStats, ...averageStats };
+    
     // Print performance metrics
     console.log("\n📊 Performance Metrics:");
     console.log(`- Image Normalization: ${timings.normalization.toFixed(2)}ms`);
     console.log(`- Image Load & Encode: ${timings.imageLoad.toFixed(2)}ms`);
     console.log(`- API Request & Parse: ${timings.apiRequest.toFixed(2)}ms`);
     console.log(`- Total Execution Time: ${timings.total.toFixed(2)}ms`);
+    
+    // Show individual chunk performance summary
+    if (chunkStats.length > 1) {
+        console.log(`\n⚡ Individual Chunk Performance:`);
+        chunkStats.forEach((stat, index) => {
+            if (stat.tokensPerSecond && stat.timeToFirstToken) {
+                console.log(`- Chunk ${index + 1}: ${stat.tokensPerSecond.toFixed(2)} tok/sec, ${(stat.timeToFirstToken * 1000).toFixed(0)}ms TTFT`);
+            }
+        });
+    }
+    
+    // Display GPU stats if available
+    if (Object.keys(combinedGPUStats).length > 0) {
+        console.log(`\n🎮 LM Studio Performance Stats${chunkStats.length > 1 ? ' (Averaged across ' + chunkStats.length + ' chunks)' : ''}:`);
+        if (combinedGPUStats.modelName) {
+            console.log(`- Model: ${combinedGPUStats.modelName}`);
+        }
+        if (combinedGPUStats.modelSize) {
+            console.log(`- Model Size: ${combinedGPUStats.modelSize}`);
+        }
+        if (combinedGPUStats.tokensPerSecond) {
+            console.log(`- Average Tokens/Second: ${combinedGPUStats.tokensPerSecond.toFixed(2)} tok/sec`);
+        }
+        if (combinedGPUStats.timeToFirstToken) {
+            console.log(`- Average Time to First Token: ${(combinedGPUStats.timeToFirstToken * 1000).toFixed(2)}ms`);
+        }
+        if (combinedGPUStats.generationTime) {
+            console.log(`- Average Generation Time: ${(combinedGPUStats.generationTime * 1000).toFixed(2)}ms`);
+        }
+        if (combinedGPUStats.draftModel) {
+            console.log(`- Draft Model: ${combinedGPUStats.draftModel}`);
+            console.log(`- Speculative Decoding Stats (Averaged):`);
+            if (combinedGPUStats.totalDraftTokensCount) {
+                console.log(`  • Avg Total Draft Tokens: ${combinedGPUStats.totalDraftTokensCount}`);
+            }
+            if (combinedGPUStats.acceptedDraftTokensCount !== undefined) {
+                console.log(`  • Avg Accepted Draft Tokens: ${combinedGPUStats.acceptedDraftTokensCount}`);
+            }
+            if (combinedGPUStats.rejectedDraftTokensCount !== undefined) {
+                console.log(`  • Avg Rejected Draft Tokens: ${combinedGPUStats.rejectedDraftTokensCount}`);
+            }
+            if (combinedGPUStats.draftAcceptanceRate !== undefined) {
+                console.log(`  • Avg Draft Acceptance Rate: ${combinedGPUStats.draftAcceptanceRate.toFixed(1)}%`);
+            }
+        }
+        if (combinedGPUStats.stopReason) {
+            console.log(`- Stop Reason: ${combinedGPUStats.stopReason}`);
+        }
+        
+        // Display any other stats we collected
+        Object.entries(combinedGPUStats).forEach(([key, value]) => {
+            const knownKeys = ['modelName', 'modelSize', 'tokensPerSecond', 'timeToFirstToken', 'generationTime', 
+                             'stopReason', 'draftModel', 'totalDraftTokensCount', 'acceptedDraftTokensCount', 
+                             'rejectedDraftTokensCount', 'ignoredDraftTokensCount', 'draftAcceptanceRate', 'timestamp'];
+            if (!knownKeys.includes(key)) {
+                console.log(`- ${key}: ${value}`);
+            }
+        });
+    } else {
+        console.log("\n🎮 LM Studio Performance Stats: Unable to collect");
+        console.log("   Note: Make sure LM Studio v0.3.10+ is running with REST API enabled");
+    }
 }
 
 // Helper function to determine MIME type
