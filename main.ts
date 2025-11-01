@@ -1,5 +1,5 @@
 // vision_api.ts
-import { decodeBase64, encodeBase64 } from "jsr:@std/encoding/base64";
+import { encodeBase64 } from "jsr:@std/encoding/base64";
 import { normalizeImage } from "./image_normalizer.ts";
 
 // Configuration
@@ -116,15 +116,42 @@ Only extract information that is clearly visible and relevant to this receipt tr
         }
     }
 
-    // Combine results if multiple chunks
+    // Process and deduplicate results
+    let finalText = "";
     if (allResults.length > 1) {
-        console.log("🔗 Combined Results from All Chunks:");
+        console.log("🔗 Processing and deduplicating results from all chunks...");
+        finalText = deduplicateAndMergeText(allResults);
+        
+        console.log("\n📋 Individual Chunk Results:");
         console.log("=" .repeat(50));
         allResults.forEach((result, index) => {
             console.log(`\n--- Chunk ${index + 1} ---`);
             console.log(result);
         });
         console.log("=" .repeat(50));
+        
+        console.log("\n🎯 FINAL CONSOLIDATED OUTPUT:");
+        console.log("=" .repeat(50));
+        console.log(finalText);
+        console.log("=" .repeat(50));
+        console.log(`📊 Final output: ${finalText.split('\n').length} lines, ${finalText.length} characters`);
+    } else if (allResults.length === 1) {
+        finalText = allResults[0];
+        console.log("\n🎯 FINAL OUTPUT:");
+        console.log("=" .repeat(50));
+        console.log(finalText);
+        console.log("=" .repeat(50));
+        console.log(`📊 Output: ${finalText.split('\n').length} lines, ${finalText.length} characters`);
+    } else {
+        console.log("⚠️ No valid text content extracted from any chunk.");
+        finalText = "No readable content found";
+    }
+
+    // Optionally save the final output to a text file
+    if (finalText && finalText !== "No readable content found") {
+        const outputTextPath = imagePath.replace(/\.[^.]+$/, '_extracted_text.txt');
+        await Deno.writeTextFile(outputTextPath, finalText);
+        console.log(`💾 Final text saved to: ${outputTextPath}`);
     }
 
 } catch (error) {
@@ -154,4 +181,112 @@ function getMimeType(filePath: string): string {
         case "bmp": return "image/bmp";
         default: return "application/octet-stream";
     }
+}
+
+/**
+ * Deduplicate and merge text from multiple chunks
+ * Handles overlapping content between receipt chunks
+ */
+function deduplicateAndMergeText(textChunks: string[]): string {
+    if (textChunks.length === 0) return "";
+    if (textChunks.length === 1) return textChunks[0];
+
+    console.log("🔄 Deduplicating overlapping text between chunks...");
+
+    // Split each chunk into lines for easier processing
+    const chunkLines = textChunks.map(chunk => 
+        chunk.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+    );
+
+    let mergedLines: string[] = [];
+    
+    // Start with the first chunk
+    mergedLines = [...chunkLines[0]];
+    console.log(`  ✅ Added ${chunkLines[0].length} lines from chunk 1`);
+
+    // Process each subsequent chunk
+    for (let chunkIndex = 1; chunkIndex < chunkLines.length; chunkIndex++) {
+        const currentChunk = chunkLines[chunkIndex];
+        console.log(`  🔍 Processing chunk ${chunkIndex + 1} with ${currentChunk.length} lines...`);
+
+        // Find the best overlap point between merged content and current chunk
+        const overlapIndex = findBestOverlap(mergedLines, currentChunk);
+        
+        if (overlapIndex >= 0) {
+            // Found overlap - remove duplicated lines from current chunk
+            const uniqueLines = currentChunk.slice(overlapIndex);
+            console.log(`    📌 Found overlap at position ${overlapIndex}, adding ${uniqueLines.length} unique lines`);
+            mergedLines.push(...uniqueLines);
+        } else {
+            // No overlap found - add all lines (might be a gap in the receipt)
+            console.log(`    ➕ No overlap found, adding all ${currentChunk.length} lines`);
+            mergedLines.push(...currentChunk);
+        }
+    }
+
+    console.log(`✅ Deduplication complete: ${mergedLines.length} total lines`);
+    return mergedLines.join('\n');
+}
+
+/**
+ * Find the best overlap point between existing merged content and a new chunk
+ * Returns the index in the new chunk where unique content starts
+ */
+function findBestOverlap(mergedLines: string[], newChunkLines: string[]): number {
+    const lookbackLines = Math.min(10, mergedLines.length); // Look at last 10 lines of merged content
+    const lookforwardLines = Math.min(10, newChunkLines.length); // Look at first 10 lines of new chunk
+    
+    // Get the last few lines of merged content for comparison
+    const endOfMerged = mergedLines.slice(-lookbackLines);
+    
+    // Try to find matching sequences
+    for (let newStart = 0; newStart < lookforwardLines; newStart++) {
+        let matchLength = 0;
+        
+        // Count consecutive matching lines
+        for (let i = 0; i < Math.min(endOfMerged.length, newChunkLines.length - newStart); i++) {
+            const mergedLine = endOfMerged[endOfMerged.length - 1 - i];
+            const newLine = newChunkLines[newStart + i];
+            
+            if (normalizeLineForComparison(mergedLine) === normalizeLineForComparison(newLine)) {
+                matchLength++;
+            } else {
+                break;
+            }
+        }
+        
+        // If we found a good match (at least 2 lines), return the position after the overlap
+        if (matchLength >= 2) {
+            console.log(`    🎯 Found ${matchLength} matching lines starting at position ${newStart}`);
+            return newStart + matchLength;
+        }
+    }
+    
+    // Try fuzzy matching for smaller overlaps or slight variations
+    for (let newStart = 0; newStart < Math.min(5, newChunkLines.length); newStart++) {
+        const newLine = normalizeLineForComparison(newChunkLines[newStart]);
+        
+        // Check if this line appears in the last few lines of merged content
+        for (let mergedIndex = Math.max(0, mergedLines.length - 5); mergedIndex < mergedLines.length; mergedIndex++) {
+            const mergedLine = normalizeLineForComparison(mergedLines[mergedIndex]);
+            
+            if (newLine.length > 10 && mergedLine.includes(newLine) || newLine.includes(mergedLine)) {
+                console.log(`    🔍 Found fuzzy match at position ${newStart}`);
+                return newStart + 1;
+            }
+        }
+    }
+    
+    return -1; // No overlap found
+}
+
+/**
+ * Normalize a line for comparison by removing extra spaces, punctuation variations, etc.
+ */
+function normalizeLineForComparison(line: string): string {
+    return line
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '') // Remove punctuation
+        .replace(/\s+/g, ' ')    // Normalize spaces
+        .trim();
 }

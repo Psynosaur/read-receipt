@@ -122,9 +122,9 @@ export async function normalizeImage(
       scaleFactor = Math.min(targetWidth / originalWidth, targetHeight / originalHeight);
       break;
 
-    case 'chunk':
-      // This case is handled above
-      throw new Error('Chunking should have been handled earlier');
+    // case 'chunk':
+    //   // This case is handled above
+    //   throw new Error('Chunking should have been handled earlier');
 
     default:
       throw new Error(`Unknown normalization method: ${method}`);
@@ -528,7 +528,7 @@ if (import.meta.main) {
       });
     }
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error("Error:", error instanceof Error ? error.message : String(error));
     Deno.exit(1);
   }
 }

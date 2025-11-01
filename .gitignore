@@ -1,0 +1,26 @@
+# Deno cache and build artifacts
+.deno/
+_fresh/ # Specific to Fresh projects
+
+# Lock files
+deno.lock
+npm-shrinkwrap.json
+package-lock.json
+
+# Dependencies
+node_modules/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+
+# Operating System files
+.DS_Store
+
+# Log files
+*.log
+
+# Environment variables
+.env
+
+data/
