@@ -108,8 +108,8 @@ Only extract information that is clearly visible and relevant to this receipt tr
         if (content.trim() !== "EMPTY_CHUNK" && content.trim().length > 10) {
             allResults.push(content);
             
-            console.log(`📄 Response from LM Studio (${model}) - Chunk ${i + 1}:`);
-            console.log(content);
+            // console.log(`📄 Response from LM Studio (${model}) - Chunk ${i + 1}:`);
+            // console.log(content);
             console.log(`📊 Content length: ${content.length} characters\n`);
         } else {
             console.log(`🚫 Skipping chunk ${i + 1} - Empty or invalid content`);

@@ -92,29 +92,7 @@ The system includes advanced algorithms to handle overlapping text:
 ## Example Output
 
 ### Input Image
-![Receipt Example](./auto_cropped.jpg)
-
-### Processing Results
-
-```
-🎯 Normalizing image to 896x896...
-📄 Long receipt detected (aspect ratio: 3.28), creating chunks...
-📋 Processing 4 image(s)...
-
-🔗 Processing and deduplicating results from all chunks...
-🔄 Deduplicating overlapping text between chunks...
-  ✅ Added 19 lines from chunk 1
-  🔍 Processing chunk 2 with 25 lines...
-    📌 Found overlap at position 2, adding 23 unique lines
-  🔍 Processing chunk 3 with 23 lines...
-    📌 Found overlap at position 3, adding 20 unique lines
-  🔍 Processing chunk 4 with 8 lines...
-    📌 Found overlap at position 1, adding 7 unique lines
-✅ Deduplication complete: 69 total lines
-```
-
-### Final Consolidated Text Output
-
+![Receipt Example](./auto_cropped.jpg) 
 ```
 WILLOWBRIDGE
 North Shopping Centre, Tyger Valley
@@ -122,13 +100,61 @@ Tel No: 021 914 8011
 WCP/037338
 VAT NO. 4270124169
 TAX INVOICE
-
 A/G TOMATO PASTE 500G
 2 @ 7.49  14.98
 AVOS EACH
 4 @ 12.99  51.96*
 PROMOTION DISCOUNT -12.96
-...
+B/RIB TOASTER BROWN 700G
+85  17.99*
+BANANAS LS
+1.984KG NET @ 16.99/kg  33.71*
+115
+BUTTERNUT LS
+1.534KG NET @ 7.99/kg  12.26*
+2011
+2011
+CHEDDAR
+0.478KG NET @ 109.99/KG 52.58
+32726
+CHEESE & HAM NOODLE SALAD
+0.322KG NET @ 140.00/KG 45.08
+5115
+COLESLAW SALAD
+0.376KG NET @ 70.00/KG 26.32
+47830
+CURRIED PASTA SALAD
+0.206KG NET @ 79.90/KG 16.46
+F/C MILK ECD FRESH F/C 2L
+2 @ 29.95 59.90*
+F/C YOG F/C S/BERRY 1KG 39.99
+F/L W/BUTTON MUSHROOMS 200G
+2 @ 22.99 45.98*
+PROMOTION DISCOUNT -6.98
+FL BROCCOLI FLORETS 500G 29.99*
+FLYERS PUFFED CORN 100G 12.99
+KIWI FRUIT GREEN 14.99
+MAGGI HDLS MP CHICKEN 5S 68G 36.99
+460
+ONIONS LS 12.69*
+0.668kg NET @ 18.99/kg
+8384
+PASTA PESTO SALAD 30.80
+0.220kg NET @ 140.00/kg
+290
+PEPPERS GREEN LS 14.94*
+0.498kg NET @ 29.99/kg
+4099
+POTATO SALAD 21.28
+0.266kg NET @ 80.00/kg
+ROLLS SAVOURY 41.94
+6 @ 6.99
+PROMOTION DISCOUNT -5.94
+SIRCO COCOA CREAM 500G 39.99
+SPOOKIES PUFFS CHEESE 100G 12.99
+17562
+SWEET POT ORANGE LS 24.99*
+1.250kg NET @ 19.99/kg
 TOTAL 685.91
 EFT 685.91
 CHANGE 0.00
@@ -137,6 +163,15 @@ Description NET VAT TOTAL
 *Non Vat 299.46 0.00 299.46
 VAT 336.04 50.41 386.45
 VAT TOTALS 635.50 50.41 685.91
+==================================================
+📊 Final output: 69 lines, 1329 characters
+💾 Final text saved to: .\auto_cropped_extracted_text.txt
+
+📊 Performance Metrics:
+- Image Normalization: 187.80ms
+- Image Load & Encode: 8.45ms
+- API Request & Parse: 29679.78ms
+- Total Execution Time: 29886.42ms
 ```
 
 *Complete output saved to: `./auto_cropped_extracted_text.txt`*
@@ -174,19 +209,6 @@ interface ImageNormalizationOptions {
   thresholdValue?: number;     // Default: 128
 }
 ```
-
-## Performance Metrics
-
-The system provides detailed performance tracking:
-
-```
-📊 Performance Metrics:
-- Image Normalization: 193.00ms
-- Image Load & Encode: 10.30ms
-- API Request & Parse: 29935.28ms
-- Total Execution Time: 30150.15ms
-```
-
 ## Use Cases
 
 - **Retail Receipt Processing**: Extract itemized purchases and totals
