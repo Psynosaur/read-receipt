@@ -465,11 +465,11 @@ export function displayGPUStats(
     const tokensPerSec = combinedGPUStats.tokensPerSecond?.toFixed(2) || "N/A";
     const ttft = combinedGPUStats.timeToFirstToken ? (combinedGPUStats.timeToFirstToken * 1000).toFixed(2) + "ms" : "N/A";
     const genTime = combinedGPUStats.generationTime?.toFixed(2) + "ms" || "N/A";
-    const model = combinedGPUStats.modelName || "Unknown";
+    const modelName = combinedGPUStats.modelName || model;
     
     const chunkSuffix = chunkStats.length > 1 ? ` (averaged across ${chunkStats.length} chunks)` : "";
     
-    console.log(`LM Studio Performance Stats${chunkSuffix}: Model: ${model}, ${tokensPerSec} tok/sec, ${ttft} TTFT, ${genTime} generation time. Tokens: ${calculatedInputTokens} input (${textTokens} text + ${imageTokens} image) + ${outputTokens} output = ${totalTokens} total`);
+    console.log(`LM Studio Performance Stats${chunkSuffix}: Model: ${modelName}, ${tokensPerSec} tok/sec, ${ttft} TTFT, ${genTime} generation time. Tokens: ${calculatedInputTokens} input (${textTokens} text + ${imageTokens} image) + ${outputTokens} output = ${totalTokens} total`);
   } else {
     console.log("LM Studio Performance Stats: Unable to collect - Make sure LM Studio v0.3.10+ is running with a VLM model loaded");
   }
