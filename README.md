@@ -1,6 +1,6 @@
 # Receipt OCR Parser with Image Normalization
 
-A powerful TypeScript-based OCR system for extracting text from receipt images using LM Studio vision models. The system intelligently handles long receipts by chunking them into optimal segments and provides advanced text deduplication features.
+TypeScript-based OCR system for extracting text from receipt images using LM Studio vision models. The system handles long receipts by chunking them into optimal segments and provides some text deduplication features.
 
 ## Features
 
