@@ -1,12 +1,12 @@
 // vision_api.ts
-import { encodeBase64 } from "jsr:@std/encoding/base64";
+import { LMStudioClient } from "@lmstudio/sdk";
 import { normalizeImage } from "./image_normalizer.ts";
 
 // Configuration
-const _LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"; // Legacy OpenAI API
-const LM_STUDIO_MODELS_URL = "http://localhost:1234/v1/models";
-const LM_STUDIO_REST_API_URL = "http://localhost:1234/api/v0/chat/completions"; // LM Studio's REST API with stats
-const DEFAULT_MODEL = "llava"; // Change to your preferred model
+const DEFAULT_MODEL = "google/gemma-3-27b"; // Change to your preferred VLM model
+
+// Initialize LM Studio client
+const client = new LMStudioClient();
 
 // Performance metrics
 const timings = {
@@ -31,6 +31,17 @@ interface GPUStats {
     rejectedDraftTokensCount?: number;
     ignoredDraftTokensCount?: number;
     draftAcceptanceRate?: number;
+    // Token generation metrics
+    tokensGenerated?: number;
+    estimatedTokens?: number;
+    completionTokens?: number;
+    promptTokens?: number;
+    totalTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    // Image-specific token metrics
+    imageTokens?: number;
+    textPromptTokens?: number;
 }
 
 // Collect stats from each chunk run
@@ -38,23 +49,20 @@ const chunkStats: GPUStats[] = [];
 const gpuStats: GPUStats = {};
 
 /**
- * Collect GPU performance stats from LM Studio v0.3.10 REST API
+ * Collect GPU performance stats from LM Studio client
  */
 async function collectGPUStats(): Promise<GPUStats> {
     try {
-        // Get model info from models endpoint
-        const modelsResponse = await fetch(LM_STUDIO_MODELS_URL);
-        let modelInfo = {};
+        // Get loaded models from LM Studio client
+        const loadedModels = await client.llm.listLoaded();
         
-        if (modelsResponse.ok) {
-            const modelsData = await modelsResponse.json();
-            if (modelsData.data && modelsData.data.length > 0) {
-                const activeModel = modelsData.data[0];
-                modelInfo = {
-                    modelName: activeModel.id || 'Unknown',
-                    modelSize: activeModel.owned_by || 'Unknown size'
-                };
-            }
+        let modelInfo = {};
+        if (loadedModels.length > 0) {
+            const activeModel = loadedModels[0];
+            modelInfo = {
+                modelName: activeModel.identifier || 'Unknown',
+                modelSize: 'Unknown size' // This info might not be directly available
+            };
         }
 
         return {
@@ -66,6 +74,22 @@ async function collectGPUStats(): Promise<GPUStats> {
         console.log("⚠️  Could not collect GPU stats:", error instanceof Error ? error.message : String(error));
         return {};
     }
+}
+
+/**
+ * Estimate token breakdown for vision models
+ */
+function estimateTokenBreakdown(prompt: string, totalInputTokens: number): { textTokens: number; imageTokens: number } {
+    // Estimate text prompt tokens (rough approximation: ~4 characters per token)
+    const estimatedTextTokens = Math.round(prompt.length / 4);
+    
+    // Image tokens are the remainder of input tokens after text
+    const imageTokens = Math.max(0, totalInputTokens - estimatedTextTokens);
+    
+    return {
+        textTokens: estimatedTextTokens,
+        imageTokens: imageTokens
+    };
 }
 
 /**
@@ -82,6 +106,16 @@ function calculateAverageStats(stats: GPUStats[]): GPUStats {
         if (stat.acceptedDraftTokensCount) acc.acceptedDraftTokensCount = (acc.acceptedDraftTokensCount || 0) + stat.acceptedDraftTokensCount;
         if (stat.rejectedDraftTokensCount) acc.rejectedDraftTokensCount = (acc.rejectedDraftTokensCount || 0) + stat.rejectedDraftTokensCount;
         if (stat.ignoredDraftTokensCount) acc.ignoredDraftTokensCount = (acc.ignoredDraftTokensCount || 0) + stat.ignoredDraftTokensCount;
+        // Token generation metrics
+        if (stat.tokensGenerated) acc.tokensGenerated = (acc.tokensGenerated || 0) + stat.tokensGenerated;
+        if (stat.estimatedTokens) acc.estimatedTokens = (acc.estimatedTokens || 0) + stat.estimatedTokens;
+        if (stat.completionTokens) acc.completionTokens = (acc.completionTokens || 0) + stat.completionTokens;
+        if (stat.promptTokens) acc.promptTokens = (acc.promptTokens || 0) + stat.promptTokens;
+        if (stat.totalTokens) acc.totalTokens = (acc.totalTokens || 0) + stat.totalTokens;
+        if (stat.inputTokens) acc.inputTokens = (acc.inputTokens || 0) + stat.inputTokens;
+        if (stat.outputTokens) acc.outputTokens = (acc.outputTokens || 0) + stat.outputTokens;
+        if (stat.imageTokens) acc.imageTokens = (acc.imageTokens || 0) + stat.imageTokens;
+        if (stat.textPromptTokens) acc.textPromptTokens = (acc.textPromptTokens || 0) + stat.textPromptTokens;
         return acc;
     }, {} as Record<string, number>);
 
@@ -95,6 +129,17 @@ function calculateAverageStats(stats: GPUStats[]): GPUStats {
     if (totals.acceptedDraftTokensCount) averages.acceptedDraftTokensCount = Math.round(totals.acceptedDraftTokensCount / count);
     if (totals.rejectedDraftTokensCount) averages.rejectedDraftTokensCount = Math.round(totals.rejectedDraftTokensCount / count);
     if (totals.ignoredDraftTokensCount) averages.ignoredDraftTokensCount = Math.round(totals.ignoredDraftTokensCount / count);
+    
+    // Token metrics - keep totals for these
+    if (totals.tokensGenerated) averages.tokensGenerated = totals.tokensGenerated; // Total across all chunks
+    if (totals.estimatedTokens) averages.estimatedTokens = totals.estimatedTokens; // Total across all chunks
+    if (totals.completionTokens) averages.completionTokens = totals.completionTokens; // Total across all chunks
+    if (totals.promptTokens) averages.promptTokens = totals.promptTokens; // Total across all chunks
+    if (totals.totalTokens) averages.totalTokens = totals.totalTokens; // Total across all chunks
+    if (totals.inputTokens) averages.inputTokens = totals.inputTokens; // Total across all chunks
+    if (totals.outputTokens) averages.outputTokens = totals.outputTokens; // Total across all chunks
+    if (totals.imageTokens) averages.imageTokens = totals.imageTokens; // Total across all chunks
+    if (totals.textPromptTokens) averages.textPromptTokens = totals.textPromptTokens; // Total across all chunks
 
     // Calculate average draft acceptance rate
     if (averages.totalDraftTokensCount && averages.totalDraftTokensCount > 0 && averages.acceptedDraftTokensCount) {
@@ -157,13 +202,11 @@ try {
         const currentImagePath = imagesToProcess[i];
         console.log(`\n🔍 Processing image ${i + 1}/${imagesToProcess.length}: ${currentImagePath}`);
 
-        // Read and encode image - start timing
+        // Prepare image using LM Studio client - start timing
         const imageStart = performance.now();
-        const imageData = await Deno.readFile(currentImagePath);
-        const base64Image = encodeBase64(imageData);
-        const mimeType = getMimeType(currentImagePath);
-        const dataUrl = `data:${mimeType};base64,${base64Image}`;
+        const image = await client.files.prepareImage(currentImagePath);
         timings.imageLoad += performance.now() - imageStart;
+        
         const prompt = `
 You are a receipt parser.
 
@@ -172,66 +215,63 @@ Extract all textual transcational information writing out put in plain text in o
 IMPORTANT: If this image chunk contains mostly empty space, white background, or no readable receipt text, respond with "EMPTY_CHUNK" only.
 Only extract information that is clearly visible and relevant to this receipt transaction.`
 
-        // Prepare the payload
-        const payload = {
-            model,
-            messages: [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: prompt },
-                        { type: "image_url", image_url: { url: dataUrl } }
-                    ]
-                }
-            ],
-            max_tokens: 8192
-        };
+        // Get the model handle
+        const modelHandle = await client.llm.model(model);
 
-        // Send request to LM Studio REST API to get performance stats - start timing
+        // Send request to LM Studio using the client - start timing
         const apiStart = performance.now();
-        const response = await fetch(LM_STUDIO_REST_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+        const prediction = modelHandle.respond([
+            { role: "user", content: prompt, images: [image] }
+        ], {
+            maxTokens: 8192
         });
 
-        // Handle response
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`API Error: ${response.status} - ${error}`);
-        }
-
-        const result = await response.json();
+        // Get the complete response
+        const response = await prediction;
+        const content = response.content;
+        
         const apiDuration = performance.now() - apiStart;
         timings.apiRequest += apiDuration;
 
-        const content = result.choices[0].message.content;
+        // Get prediction stats from the response
+        const stats = response.stats;
         
-        // Extract performance stats from LM Studio's REST API response
-        if (result.stats) {
-            const stats = result.stats;
-            const chunkStat: GPUStats = {
-                tokensPerSecond: stats.tokens_per_second,
-                timeToFirstToken: stats.time_to_first_token,
-                generationTime: stats.generation_time,
-                stopReason: stats.stop_reason,
-                draftModel: stats.draft_model,
-                totalDraftTokensCount: stats.total_draft_tokens_count,
-                acceptedDraftTokensCount: stats.accepted_draft_tokens_count,
-                rejectedDraftTokensCount: stats.rejected_draft_tokens_count,
-                ignoredDraftTokensCount: stats.ignored_draft_tokens_count
-            };
-            
-            // Calculate draft acceptance rate if speculative decoding is being used
-            if (stats.total_draft_tokens_count > 0) {
-                chunkStat.draftAcceptanceRate = (stats.accepted_draft_tokens_count / stats.total_draft_tokens_count) * 100;
-            }
-            
-            // Store stats for this chunk
-            chunkStats.push(chunkStat);
-            
-            // Log individual chunk performance
-            console.log(`⚡ Chunk ${i + 1} Performance: ${stats.tokens_per_second.toFixed(2)} tok/sec, ${(stats.time_to_first_token * 1000).toFixed(0)}ms TTFT`);
+        // Estimate tokens from content (rough approximation: ~4 characters per token)
+        const estimatedTokensFromContent = Math.round(content.length / 4);
+        const totalTokensGenerated = stats ? stats.predictedTokensCount : estimatedTokensFromContent;
+        
+        // Estimate token breakdown between text prompt and image (rough approximation)
+        const estimatedTextTokens = Math.round(prompt.length / 4);
+        const promptTokens = stats?.promptTokensCount || (estimatedTextTokens + 1024);
+        const estimatedImageTokens = Math.max(0, promptTokens - estimatedTextTokens);
+        
+        const chunkStat: GPUStats = {
+            tokensPerSecond: stats ? stats.tokensPerSecond : undefined,
+            timeToFirstToken: stats ? stats.timeToFirstTokenSec : undefined,
+            generationTime: apiDuration,
+            stopReason: stats ? stats.stopReason : undefined,
+            // Token generation metrics
+            estimatedTokens: estimatedTokensFromContent,
+            tokensGenerated: totalTokensGenerated || 0,
+            promptTokens: stats ? stats.promptTokensCount : estimatedTextTokens + estimatedImageTokens,
+            completionTokens: stats ? stats.predictedTokensCount : estimatedTokensFromContent,
+            totalTokens: stats ? stats.totalTokensCount : undefined,
+            // Image-specific token breakdown (estimates)
+            imageTokens: estimatedImageTokens,
+            textPromptTokens: estimatedTextTokens
+        };
+
+        // Store stats for this chunk
+        chunkStats.push(chunkStat);
+        
+        // Log individual chunk performance
+        const tokensPerSec = stats?.tokensPerSecond ? stats.tokensPerSecond.toFixed(2) : 'N/A';
+        const ttft = stats?.timeToFirstTokenSec ? (stats.timeToFirstTokenSec * 1000).toFixed(0) + 'ms' : 'N/A';
+        console.log(`⚡ Chunk ${i + 1} Performance: ${tokensPerSec} tok/sec, ${ttft} TTFT`);
+        console.log(`   🎯 Tokens: ~${estimatedTextTokens} text + ~${estimatedImageTokens} image, ${totalTokensGenerated || 0} generated`);
+        console.log(`   ⏱️  Generation time: ${(apiDuration / 1000).toFixed(2)}s`);
+        if (stats) {
+            console.log(`   📊 LM Studio Stats: ${stats.promptTokensCount || 'N/A'} prompt, ${stats.predictedTokensCount || 'N/A'} completion, ${stats.totalTokensCount || 'N/A'} total`);
         }
         
         // Filter out empty or invalid chunks
@@ -308,12 +348,32 @@ Only extract information that is clearly visible and relevant to this receipt tr
     
     // Show individual chunk performance summary
     if (chunkStats.length > 1) {
-        console.log(`\n⚡ Individual Chunk Performance:`);
+        console.log(`\n⚡ Individual Chunk Performance Summary:`);
         chunkStats.forEach((stat, index) => {
             if (stat.tokensPerSecond && stat.timeToFirstToken) {
+                const inputTokens = stat.inputTokens || stat.promptTokens || 0;
+                const outputTokens = stat.outputTokens || stat.completionTokens || stat.estimatedTokens || 0;
+                const imageTokens = stat.imageTokens || 0;
+                const textTokens = stat.textPromptTokens || 0;
                 console.log(`- Chunk ${index + 1}: ${stat.tokensPerSecond.toFixed(2)} tok/sec, ${(stat.timeToFirstToken * 1000).toFixed(0)}ms TTFT`);
+                console.log(`  ${textTokens} text + ${imageTokens} image = ${inputTokens} in, ${outputTokens} out tokens`);
             }
         });
+        
+        // Show total tokens generated with breakdown
+        const totalInputTokens = chunkStats.reduce((sum, stat) => sum + (stat.inputTokens || stat.promptTokens || 0), 0);
+        const totalOutputTokens = chunkStats.reduce((sum, stat) => sum + (stat.outputTokens || stat.completionTokens || stat.estimatedTokens || 0), 0);
+        const totalImageTokens = chunkStats.reduce((sum, stat) => sum + (stat.imageTokens || 0), 0);
+        const totalTextTokens = chunkStats.reduce((sum, stat) => sum + (stat.textPromptTokens || 0), 0);
+        
+        if (totalOutputTokens > 0) {
+            console.log(`\n📊 Total Token Usage Breakdown:`);
+            console.log(`- Text Prompts: ${totalTextTokens} tokens`);
+            console.log(`- Images: ${totalImageTokens} tokens`);
+            console.log(`- Input Total: ${totalInputTokens} tokens`);
+            console.log(`- Output Total: ${totalOutputTokens} tokens`);
+            console.log(`- Grand Total: ${totalInputTokens + totalOutputTokens} tokens across ${chunkStats.length} chunks`);
+        }
     }
     
     // Display GPU stats if available
@@ -334,6 +394,38 @@ Only extract information that is clearly visible and relevant to this receipt tr
         if (combinedGPUStats.generationTime) {
             console.log(`- Average Generation Time: ${(combinedGPUStats.generationTime * 1000).toFixed(2)}ms`);
         }
+        
+        // Token generation metrics with breakdown
+        if (combinedGPUStats.inputTokens || combinedGPUStats.outputTokens) {
+            const inputTokens = combinedGPUStats.inputTokens || combinedGPUStats.promptTokens || 0;
+            const outputTokens = combinedGPUStats.outputTokens || combinedGPUStats.completionTokens || combinedGPUStats.tokensGenerated || 0;
+            const totalTokens = inputTokens + outputTokens;
+            
+            console.log(`- Token Usage: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total tokens`);
+            
+            // Show image vs text breakdown if available
+            if (combinedGPUStats.imageTokens || combinedGPUStats.textPromptTokens) {
+                const imageTokens = combinedGPUStats.imageTokens || 0;
+                const textTokens = combinedGPUStats.textPromptTokens || 0;
+                console.log(`- Input Breakdown: ${textTokens} text prompt + ${imageTokens} image tokens`);
+            }
+        } else if (combinedGPUStats.tokensGenerated || combinedGPUStats.estimatedTokens) {
+            const totalTokens = combinedGPUStats.tokensGenerated || combinedGPUStats.estimatedTokens || 0;
+            const tokenType = combinedGPUStats.tokensGenerated ? 'actual' : 'estimated';
+            console.log(`- Total Tokens Generated: ${totalTokens} tokens (${tokenType})`);
+        }
+        
+        // Additional token details if available
+        if (combinedGPUStats.completionTokens && !combinedGPUStats.outputTokens) {
+            console.log(`- Completion Tokens: ${combinedGPUStats.completionTokens}`);
+        }
+        if (combinedGPUStats.promptTokens && !combinedGPUStats.inputTokens) {
+            console.log(`- Prompt Tokens: ${combinedGPUStats.promptTokens}`);
+        }
+        if (combinedGPUStats.totalTokens) {
+            console.log(`- Total API Tokens: ${combinedGPUStats.totalTokens} (via API usage field)`);
+        }
+        
         if (combinedGPUStats.draftModel) {
             console.log(`- Draft Model: ${combinedGPUStats.draftModel}`);
             console.log(`- Speculative Decoding Stats (Averaged):`);
@@ -358,28 +450,16 @@ Only extract information that is clearly visible and relevant to this receipt tr
         Object.entries(combinedGPUStats).forEach(([key, value]) => {
             const knownKeys = ['modelName', 'modelSize', 'tokensPerSecond', 'timeToFirstToken', 'generationTime', 
                              'stopReason', 'draftModel', 'totalDraftTokensCount', 'acceptedDraftTokensCount', 
-                             'rejectedDraftTokensCount', 'ignoredDraftTokensCount', 'draftAcceptanceRate', 'timestamp'];
+                             'rejectedDraftTokensCount', 'ignoredDraftTokensCount', 'draftAcceptanceRate', 'timestamp',
+                             'tokensGenerated', 'estimatedTokens', 'completionTokens', 'promptTokens', 'totalTokens',
+                             'inputTokens', 'outputTokens', 'imageTokens', 'textPromptTokens'];
             if (!knownKeys.includes(key)) {
                 console.log(`- ${key}: ${value}`);
             }
         });
     } else {
         console.log("\n🎮 LM Studio Performance Stats: Unable to collect");
-        console.log("   Note: Make sure LM Studio v0.3.10+ is running with REST API enabled");
-    }
-}
-
-// Helper function to determine MIME type
-function getMimeType(filePath: string): string {
-    const extension = filePath.split('.').pop()?.toLowerCase();
-    switch (extension) {
-        case "png": return "image/png";
-        case "jpg":
-        case "jpeg": return "image/jpeg";
-        case "gif": return "image/gif";
-        case "webp": return "image/webp";
-        case "bmp": return "image/bmp";
-        default: return "application/octet-stream";
+        console.log("   Note: Make sure LM Studio v0.3.10+ is running with a VLM model loaded");
     }
 }
 
