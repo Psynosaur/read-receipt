@@ -126,7 +126,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
         console.log("=" .repeat(50));
         allResults.forEach((result, index) => {
             console.log(`\n--- Chunk ${index + 1} ---`);
-            console.log(result);
+            // console.log(result);
         });
         console.log("=" .repeat(50));
         
