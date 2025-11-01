@@ -69,9 +69,9 @@ export async function normalizeImage(
     chunkThreshold = 1.5,
   } = options;
 
-  console.log(`🎯 Normalizing image: ${inputPath} → ${outputPath}`);
-  console.log(`📐 Target dimensions: ${targetWidth}x${targetHeight}`);
-  console.log(`🔧 Method: ${method}`);
+  console.log(`Normalizing image: ${inputPath} → ${outputPath}`);
+  console.log(`Target dimensions: ${targetWidth}x${targetHeight}`);
+  console.log(`Method: ${method}`);
 
   // Load the image
   const imageData = await Deno.readFile(inputPath);
@@ -80,7 +80,7 @@ export async function normalizeImage(
   const originalWidth = image.width;
   const originalHeight = image.height;
 
-  console.log(`📏 Original dimensions: ${originalWidth}x${originalHeight}`);
+  console.log(`Original dimensions: ${originalWidth}x${originalHeight}`);
 
   // Check if we need to chunk the image (for very long receipts)
   const aspectRatio = originalHeight / originalWidth;
@@ -89,7 +89,7 @@ export async function normalizeImage(
 
   if (shouldChunk) {
     console.log(
-      `📄 Long receipt detected (aspect ratio: ${
+      `Long receipt detected (aspect ratio: ${
         aspectRatio.toFixed(2)
       }), creating chunks...`,
     );
@@ -159,14 +159,14 @@ export async function normalizeImage(
       throw new Error(`Unknown normalization method: ${method}`);
   }
 
-  console.log(`📊 Scale factor: ${scaleFactor.toFixed(3)}`);
+  console.log(`Scale factor: ${scaleFactor.toFixed(3)}`);
   console.log(
-    `📐 Final dimensions: ${normalizedImage.width}x${normalizedImage.height}`,
+    `Final dimensions: ${normalizedImage.width}x${normalizedImage.height}`,
   );
 
   // Apply preprocessing if requested
   if (applyPreprocessing) {
-    console.log("🔧 Applying preprocessing...");
+    console.log("Applying preprocessing...");
     await applyImagePreprocessing(normalizedImage, {
       sharpeningStrength,
       contrastFactor,
@@ -190,9 +190,9 @@ export async function normalizeImage(
     outputSize: output.length,
   };
 
-  console.log(`💾 Saved normalized image: ${outputPath}`);
-  console.log(`📊 Output size: ${(output.length / 1024).toFixed(1)} KB`);
-  console.log(`✅ Normalization complete!`);
+  console.log(`Saved normalized image: ${outputPath}`);
+  console.log(`Output size: ${(output.length / 1024).toFixed(1)} KB`);
+  console.log(`Normalization complete!`);
 
   return result;
 }
@@ -218,7 +218,7 @@ async function normalizeWithLetterbox(
   const newWidth = Math.round(originalWidth * scale);
   const newHeight = Math.round(originalHeight * scale);
 
-  console.log(`  📏 Scaled dimensions: ${newWidth}x${newHeight}`);
+  console.log(`  Scaled dimensions: ${newWidth}x${newHeight}`);
 
   // Resize the image
   const resized = image.clone();
@@ -232,7 +232,7 @@ async function normalizeWithLetterbox(
   const offsetX = Math.round((targetWidth - newWidth) / 2);
   const offsetY = Math.round((targetHeight - newHeight) / 2);
 
-  console.log(`  📍 Offset: (${offsetX}, ${offsetY})`);
+  console.log(`  Offset: (${offsetX}, ${offsetY})`);
 
   // Composite the resized image onto the canvas
   canvas.composite(resized, offsetX, offsetY);
@@ -260,7 +260,7 @@ async function normalizeWithCrop(
   const newWidth = Math.round(originalWidth * scale);
   const newHeight = Math.round(originalHeight * scale);
 
-  console.log(`  📏 Scaled dimensions: ${newWidth}x${newHeight}`);
+  console.log(`  Scaled dimensions: ${newWidth}x${newHeight}`);
 
   // Resize the image
   const resized = image.clone();
@@ -270,7 +270,7 @@ async function normalizeWithCrop(
   const cropX = Math.round((newWidth - targetWidth) / 2);
   const cropY = Math.round((newHeight - targetHeight) / 2);
 
-  console.log(`  ✂️  Crop position: (${cropX}, ${cropY})`);
+  console.log(`  Crop position: (${cropX}, ${cropY})`);
 
   // Crop to target dimensions
   resized.crop(cropX, cropY, targetWidth, targetHeight);
@@ -293,14 +293,14 @@ async function applyImagePreprocessing(
 
   // Apply sharpening
   if (sharpeningStrength > 0) {
-    console.log(`  ✨ Applying sharpening (strength: ${sharpeningStrength})`);
+    console.log(`  Applying sharpening (strength: ${sharpeningStrength})`);
     await applySharpeningFilter(image, sharpeningStrength);
   }
 
   // Apply contrast enhancement
   if (contrastFactor !== 1.0) {
     console.log(
-      `  🎨 Applying contrast enhancement (factor: ${contrastFactor})`,
+      `  Applying contrast enhancement (factor: ${contrastFactor})`,
     );
     await applyContrastEnhancement(image, contrastFactor);
   }
@@ -308,7 +308,7 @@ async function applyImagePreprocessing(
   // Apply threshold transformation
   if (thresholdValue > 0 && thresholdValue < 255) {
     console.log(
-      `  🎯 Applying threshold transformation (threshold: ${thresholdValue})`,
+      `  Applying threshold transformation (threshold: ${thresholdValue})`,
     );
     await applyThresholdTransformation(image, thresholdValue);
   }
@@ -469,7 +469,7 @@ async function normalizeWithChunking(
   const scaledWidth = targetWidth;
   const scaledHeight = Math.round(originalHeight * scaleX);
 
-  console.log(`  📏 Scaling to: ${scaledWidth}x${scaledHeight}`);
+  console.log(`  Scaling to: ${scaledWidth}x${scaledHeight}`);
 
   const scaledImage = image.clone();
   scaledImage.resize(scaledWidth, scaledHeight);
@@ -478,7 +478,7 @@ async function normalizeWithChunking(
   const chunkHeight = targetHeight - overlap; // Effective chunk height accounting for overlap
   const totalChunks = Math.ceil(scaledHeight / chunkHeight);
 
-  console.log(`  📄 Creating ${totalChunks} chunks with ${overlap}px overlap`);
+  console.log(`  Creating ${totalChunks} chunks with ${overlap}px overlap`);
 
   const chunkPaths: string[] = [];
   const baseOutputPath = outputPath.replace(/\.[^.]+$/, ""); // Remove extension
@@ -493,7 +493,7 @@ async function normalizeWithChunking(
     const minChunkHeight = Math.min(200, targetHeight * 0.3); // At least 200px or 30% of target height
     if (actualChunkHeight < minChunkHeight) {
       console.log(
-        `  ⏭️  Skipping chunk ${
+        `  Skipping chunk ${
           chunkIndex + 1
         }/${totalChunks} - too small (${actualChunkHeight}px < ${minChunkHeight}px)`,
       );
@@ -501,7 +501,7 @@ async function normalizeWithChunking(
     }
 
     console.log(
-      `  📋 Processing chunk ${
+      `  Processing chunk ${
         chunkIndex + 1
       }/${totalChunks} (y: ${startY}-${endY})`,
     );
@@ -521,7 +521,7 @@ async function normalizeWithChunking(
 
     // Apply preprocessing if requested
     if (applyPreprocessing) {
-      console.log(`    🔧 Applying preprocessing to chunk ${chunkIndex + 1}`);
+      console.log(`    Applying preprocessing to chunk ${chunkIndex + 1}`);
       await applyImagePreprocessing(finalChunk, preprocessingOptions);
     }
 
@@ -534,7 +534,7 @@ async function normalizeWithChunking(
 
     chunkPaths.push(chunkPath);
     console.log(
-      `    💾 Saved chunk: ${chunkPath} (${
+      `    Saved chunk: ${chunkPath} (${
         (chunkOutput.length / 1024).toFixed(1)
       } KB)`,
     );
@@ -561,9 +561,9 @@ async function normalizeWithChunking(
     chunkPaths,
   };
 
-  console.log(`✅ Chunking complete! Created ${totalChunks} chunks`);
+  console.log(` Chunking complete! Created ${totalChunks} chunks`);
   console.log(
-    `📊 Total output size: ${(totalOutputSize / 1024).toFixed(1)} KB`,
+    ` Total output size: ${(totalOutputSize / 1024).toFixed(1)} KB`,
   );
 
   return result;
@@ -597,7 +597,7 @@ if (import.meta.main) {
     });
 
     if (result.chunksCreated) {
-      console.log(`\n📋 Summary: Created ${result.chunksCreated} chunks:`);
+      console.log(`\n Summary: Created ${result.chunksCreated} chunks:`);
       result.chunkPaths?.forEach((path, index) => {
         console.log(`  ${index + 1}. ${path}`);
       });

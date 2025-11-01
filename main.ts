@@ -35,13 +35,13 @@ if (!imagePath) {
 
 try {
   // Collect initial GPU stats
-  console.log("🔧 Collecting GPU performance stats...");
+  console.log("Collecting GPU performance stats...");
   const initialGPUStats = await collectGPUStats(client);
   Object.assign(gpuStats, initialGPUStats);
 
   // Normalize image first - start timing
   const normalizationStart = performance.now();
-  console.log("🎯 Normalizing image to 896x896...");
+  console.log("Normalizing image to 896x896...");
 
   const normalizedPath = imagePath.replace(/\.[^.]+$/, "_normalized.jpg");
   const normalizationResult = await normalizeImage(imagePath, normalizedPath, {
@@ -61,7 +61,7 @@ try {
     ? normalizationResult.chunkPaths || []
     : [normalizedPath];
 
-  console.log(`📋 Processing ${imagesToProcess.length} image(s)...`);
+  console.log(`Processing ${imagesToProcess.length} image(s)...`);
 
   // Process each image (chunk or single normalized image)
   const allResults: string[] = [];
@@ -75,7 +75,7 @@ try {
   if (finalText && finalText !== "No readable content found") {
     const outputTextPath = imagePath.replace(/\.[^.]+$/, "_extracted_text.txt");
     await Deno.writeTextFile(outputTextPath, finalText);
-    console.log(`💾 Final text saved to: ${outputTextPath}`);
+    console.log(`Final text saved to: ${outputTextPath}`);
   }
 } catch (error) {
   console.error(
@@ -88,7 +88,7 @@ try {
   timings.total = performance.now() - timings.totalStart;
 
   // Collect final GPU stats and merge with existing data
-  console.log("🔧 Calculating average performance stats from all chunks...");
+  console.log("Calculating average performance stats from all chunks...");
   const finalGPUStats = await collectGPUStats(client);
 
   // Calculate average stats from all chunk runs
@@ -96,7 +96,7 @@ try {
   const combinedGPUStats = { ...gpuStats, ...finalGPUStats, ...averageStats };
 
   // Print performance metrics
-  console.log("\n📊 Performance Metrics:");
+  console.log("\nPerformance Metrics:");
   console.log(`- Image Normalization: ${timings.normalization.toFixed(2)}ms`);
   console.log(`- Image Load & Encode: ${timings.imageLoad.toFixed(2)}ms`);
   console.log(`- API Request & Parse: ${timings.apiRequest.toFixed(2)}ms`);

@@ -88,7 +88,7 @@ export async function collectGPUStats(
     } as GPUStats;
   } catch (error) {
     console.log(
-      "⚠️  Could not collect GPU stats:",
+      "Could not collect GPU stats:",
       error instanceof Error ? error.message : String(error),
     );
     return {};
@@ -252,8 +252,6 @@ export function deduplicateAndMergeText(textChunks: string[]): string {
   if (textChunks.length === 0) return "";
   if (textChunks.length === 1) return textChunks[0];
 
-  console.log("🔄 Deduplicating overlapping text between chunks...");
-
   // Split each chunk into lines for easier processing
   const chunkLines = textChunks.map((chunk) =>
     chunk.split("\n").map((line) => line.trim()).filter((line) =>
@@ -265,16 +263,10 @@ export function deduplicateAndMergeText(textChunks: string[]): string {
 
   // Start with the first chunk
   mergedLines = [...chunkLines[0]];
-  console.log(`  ✅ Added ${chunkLines[0].length} lines from chunk 1`);
 
   // Process each subsequent chunk
   for (let chunkIndex = 1; chunkIndex < chunkLines.length; chunkIndex++) {
     const currentChunk = chunkLines[chunkIndex];
-    console.log(
-      `  🔍 Processing chunk ${
-        chunkIndex + 1
-      } with ${currentChunk.length} lines...`,
-    );
 
     // Find the best overlap point between merged content and current chunk
     const overlapIndex = findBestOverlap(mergedLines, currentChunk);
@@ -282,20 +274,14 @@ export function deduplicateAndMergeText(textChunks: string[]): string {
     if (overlapIndex >= 0) {
       // Found overlap - remove duplicated lines from current chunk
       const uniqueLines = currentChunk.slice(overlapIndex);
-      console.log(
-        `    📌 Found overlap at position ${overlapIndex}, adding ${uniqueLines.length} unique lines`,
-      );
       mergedLines.push(...uniqueLines);
     } else {
       // No overlap found - add all lines (might be a gap in the receipt)
-      console.log(
-        `    ➕ No overlap found, adding all ${currentChunk.length} lines`,
-      );
       mergedLines.push(...currentChunk);
     }
   }
 
-  console.log(`✅ Deduplication complete: ${mergedLines.length} total lines`);
+  console.log(`Deduplication complete: processed ${textChunks.length} chunks, merged to ${mergedLines.length} total lines`);
   return mergedLines.join("\n");
 }
 
@@ -350,9 +336,6 @@ export function findBestOverlap(
 
     // If we found a good match (at least 2 lines), return the position after the overlap
     if (matchLength >= 2) {
-      console.log(
-        `    🎯 Found ${matchLength} matching lines starting at position ${newStart}`,
-      );
       return newStart + matchLength;
     }
   }
@@ -377,7 +360,6 @@ export function findBestOverlap(
         newLine.length > 10 && mergedLine.includes(newLine) ||
         newLine.includes(mergedLine)
       ) {
-        console.log(`    🔍 Found fuzzy match at position ${newStart}`);
         return newStart + 1;
       }
     }
@@ -417,27 +399,7 @@ export function normalizeLineForComparison(line: string): string {
  */
 export function showChunkPerformanceSummary() {
   if (chunkStats.length > 1) {
-    console.log(`\n⚡ Individual Chunk Performance Summary:`);
-    chunkStats.forEach((stat, index) => {
-      if (stat.tokensPerSecond && stat.timeToFirstToken) {
-        // Use actual output tokens from LM Studio stats when available
-        const outputTokens = stat.outputTokens || stat.completionTokens || 0;
-        const imageTokens = stat.imageTokens || 0;
-        const textTokens = stat.textPromptTokens || 0;
-        const totalInputTokens = textTokens + imageTokens;
-        const generationTimeMs = stat.generationTime ? stat.generationTime.toFixed(0) : 'N/A';
-        console.log(
-          `- Chunk ${index + 1}: ${stat.tokensPerSecond.toFixed(2)} tok/sec, ${
-            (stat.timeToFirstToken * 1000).toFixed(0)
-          }ms TTFT, ${generationTimeMs}ms total`,
-        );
-        console.log(
-          `  ${textTokens} text + ${imageTokens} image = ${totalInputTokens} in, ${outputTokens} out tokens`,
-        );
-      }
-    });
-
-    // Show total tokens generated with breakdown using actual API data
+    // Calculate totals
     const totalImageTokens = chunkStats.reduce(
       (sum, stat) => sum + (stat.imageTokens || 0),
       0,
@@ -452,18 +414,7 @@ export function showChunkPerformanceSummary() {
       0,
     );
 
-    if (totalOutputTokens > 0) {
-      console.log(`\n📊 Total Token Usage Breakdown:`);
-      console.log(`- Text Prompts: ${totalTextTokens} tokens`);
-      console.log(`- Images: ${totalImageTokens} tokens`);
-      console.log(`- Input Total: ${totalInputTokens} tokens`);
-      console.log(`- Output Total: ${totalOutputTokens} tokens`);
-      console.log(
-        `- Grand Total: ${
-          totalInputTokens + totalOutputTokens
-        } tokens across ${chunkStats.length} chunks`,
-      );
-    }
+    console.log(`Individual Chunk Performance Summary: ${chunkStats.length} chunks processed. Total tokens: ${totalInputTokens} input (${totalTextTokens} text + ${totalImageTokens} image) + ${totalOutputTokens} output = ${totalInputTokens + totalOutputTokens} total`);
   }
 }
 
@@ -504,146 +455,23 @@ export function displayGPUStats(
   },
 ) {
   if (Object.keys(combinedGPUStats).length > 0) {
-    console.log(
-      `\n🎮 LM Studio Performance Stats${
-        chunkStats.length > 1
-          ? " (Averaged across " + chunkStats.length + " chunks)"
-          : ""
-      }:`,
-    );
-    if (combinedGPUStats.modelName) {
-      console.log(`- Model: ${combinedGPUStats.modelName}`);
-    }
-    if (combinedGPUStats.modelSize) {
-      console.log(`- Model Size: ${combinedGPUStats.modelSize}`);
-    }
-    if (combinedGPUStats.tokensPerSecond) {
-      console.log(
-        `- Average Tokens/Second: ${
-          combinedGPUStats.tokensPerSecond.toFixed(2)
-        } tok/sec`,
-      );
-    }
-    if (combinedGPUStats.timeToFirstToken) {
-      console.log(
-        `- Average Time to First Token: ${
-          (combinedGPUStats.timeToFirstToken * 1000).toFixed(2)
-        }ms`,
-      );
-    }
-    if (combinedGPUStats.generationTime) {
-      console.log(
-        `- Average Generation Time: ${
-          combinedGPUStats.generationTime.toFixed(2)
-        }ms`,
-      );
-    }
-
     // Token generation metrics with breakdown
-    // Use actual token counts from LM Studio API when available
     const imageTokens = combinedGPUStats.imageTokens || 0;
     const textTokens = combinedGPUStats.textPromptTokens || 0;
     const calculatedInputTokens = imageTokens + textTokens;
+    const outputTokens = combinedGPUStats.outputTokens || combinedGPUStats.completionTokens || 0;
+    const totalTokens = calculatedInputTokens + outputTokens;
     
-    // Prefer actual API token counts over estimates
-    const outputTokens = combinedGPUStats.outputTokens ||
-      combinedGPUStats.completionTokens || 0;
-
-    if (calculatedInputTokens > 0 || outputTokens > 0) {
-      const totalTokens = calculatedInputTokens + outputTokens;
-
-      console.log(
-        `- Token Usage: ${calculatedInputTokens} input + ${outputTokens} output = ${totalTokens} total tokens`,
-      );
-
-      // Show image vs text breakdown if available
-      if (calculatedInputTokens > 0) {
-        console.log(
-          `- Input Breakdown: ${textTokens} text prompt + ${imageTokens} image tokens`,
-        );
-      }
-    }
-
-    // Additional token details if available
-    if (combinedGPUStats.completionTokens) {
-      console.log(`- Completion Tokens: ${combinedGPUStats.completionTokens}`);
-    }
-    if (combinedGPUStats.promptTokens) {
-      console.log(
-        `- Prompt Tokens (LM Studio API): ${combinedGPUStats.promptTokens}`,
-      );
-    }
-    if (combinedGPUStats.totalTokens) {
-      console.log(
-        `- Total API Tokens: ${combinedGPUStats.totalTokens} (via API usage field)`,
-      );
-    }
-
-    if (combinedGPUStats.draftModel) {
-      console.log(`- Draft Model: ${combinedGPUStats.draftModel}`);
-      console.log(`- Speculative Decoding Stats (Averaged):`);
-      if (combinedGPUStats.totalDraftTokensCount) {
-        console.log(
-          `  • Avg Total Draft Tokens: ${combinedGPUStats.totalDraftTokensCount}`,
-        );
-      }
-      if (combinedGPUStats.acceptedDraftTokensCount !== undefined) {
-        console.log(
-          `  • Avg Accepted Draft Tokens: ${combinedGPUStats.acceptedDraftTokensCount}`,
-        );
-      }
-      if (combinedGPUStats.rejectedDraftTokensCount !== undefined) {
-        console.log(
-          `  • Avg Rejected Draft Tokens: ${combinedGPUStats.rejectedDraftTokensCount}`,
-        );
-      }
-      if (combinedGPUStats.draftAcceptanceRate !== undefined) {
-        console.log(
-          `  • Avg Draft Acceptance Rate: ${
-            combinedGPUStats.draftAcceptanceRate.toFixed(1)
-          }%`,
-        );
-      }
-    }
-    if (combinedGPUStats.stopReason) {
-      console.log(`- Stop Reason: ${combinedGPUStats.stopReason}`);
-    }
-
-    // Display any other stats we collected
-    Object.entries(combinedGPUStats).forEach(([key, value]) => {
-      const knownKeys = [
-        "modelName",
-        "modelSize",
-        "tokensPerSecond",
-        "timeToFirstToken",
-        "generationTime",
-        "stopReason",
-        "draftModel",
-        "totalDraftTokensCount",
-        "acceptedDraftTokensCount",
-        "rejectedDraftTokensCount",
-        "ignoredDraftTokensCount",
-        "draftAcceptanceRate",
-        "timestamp",
-        "tokensGenerated",
-        "estimatedTokens",
-        "completionTokens",
-        "promptTokens",
-        "totalTokens",
-        "inputTokens",
-        "outputTokens",
-        "imageTokens",
-        "textPromptTokens",
-      ];
-      if (!knownKeys.includes(key)) {
-        console.log(`- ${key}: ${value}`);
-      }
-    });
+    const tokensPerSec = combinedGPUStats.tokensPerSecond?.toFixed(2) || "N/A";
+    const ttft = combinedGPUStats.timeToFirstToken ? (combinedGPUStats.timeToFirstToken * 1000).toFixed(2) + "ms" : "N/A";
+    const genTime = combinedGPUStats.generationTime?.toFixed(2) + "ms" || "N/A";
+    const model = combinedGPUStats.modelName || "Unknown";
+    
+    const chunkSuffix = chunkStats.length > 1 ? ` (averaged across ${chunkStats.length} chunks)` : "";
+    
+    console.log(`LM Studio Performance Stats${chunkSuffix}: Model: ${model}, ${tokensPerSec} tok/sec, ${ttft} TTFT, ${genTime} generation time. Tokens: ${calculatedInputTokens} input (${textTokens} text + ${imageTokens} image) + ${outputTokens} output = ${totalTokens} total`);
   } else {
-    console.log("\n🎮 LM Studio Performance Stats: Unable to collect");
-    console.log(
-      "   Note: Make sure LM Studio v0.3.10+ is running with a VLM model loaded",
-    );
+    console.log("LM Studio Performance Stats: Unable to collect - Make sure LM Studio v0.3.10+ is running with a VLM model loaded");
   }
 }
 
@@ -662,39 +490,19 @@ export function displayGPUStats(
 export function processChunkedText(allResults: string[]) {
   let finalText = "";
   if (allResults.length > 1) {
-    console.log("🔗 Processing and deduplicating results from all chunks...");
     finalText = deduplicateAndMergeText(allResults);
-
-    console.log("\n📋 Individual Chunk Results:");
-    console.log("=".repeat(50));
-    allResults.forEach((_result, index) => {
-      console.log(`\n--- Chunk ${index + 1} ---`);
-      // console.log(result);
-    });
-    console.log("=".repeat(50));
-
-    console.log("\n🎯 FINAL CONSOLIDATED OUTPUT:");
+    console.log(`FINAL CONSOLIDATED OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters`);
     console.log("=".repeat(50));
     console.log(finalText);
     console.log("=".repeat(50));
-    console.log(
-      `📊 Final output: ${
-        finalText.split("\n").length
-      } lines, ${finalText.length} characters`,
-    );
   } else if (allResults.length === 1) {
     finalText = allResults[0];
-    console.log("\n🎯 FINAL OUTPUT:");
+    console.log(`FINAL OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters`);
     console.log("=".repeat(50));
     console.log(finalText);
     console.log("=".repeat(50));
-    console.log(
-      `📊 Output: ${
-        finalText.split("\n").length
-      } lines, ${finalText.length} characters`,
-    );
   } else {
-    console.log("⚠️ No valid text content extracted from any chunk.");
+    console.log("No valid text content extracted from any chunk.");
     finalText = "No readable content found";
   }
   return finalText;
@@ -721,11 +529,6 @@ export async function processImageChunks(
 ) {
   for (let i = 0; i < imagesToProcess.length; i++) {
     const currentImagePath = imagesToProcess[i];
-    console.log(
-      `\n🔍 Processing image ${
-        i + 1
-      }/${imagesToProcess.length}: ${currentImagePath}`,
-    );
 
     // Prepare image using LM Studio client - start timing
     const imageStart = performance.now();
@@ -807,37 +610,14 @@ Only extract information that is clearly visible and relevant to this receipt tr
     // Store stats for this chunk
     chunkStats.push(chunkStat);
 
-    // Log individual chunk performance
-    const tokensPerSec = stats?.tokensPerSecond
-      ? stats.tokensPerSecond.toFixed(2)
-      : "N/A";
-    const ttft = stats?.timeToFirstTokenSec
-      ? (stats.timeToFirstTokenSec * 1000).toFixed(0) + "ms"
-      : "N/A";
-    console.log(`        Performance: ${tokensPerSec} tok/sec, ${ttft} TTFT`);
-    console.log(
-      `             Tokens: ~${actualTextTokens} text + ~${actualImageTokens} image, ${
-        totalTokensGenerated || 0
-      } generated`,
-    );
-    console.log(`    Generation time: ${(apiDuration / 1000).toFixed(2)}s`);
-    if (stats) {
-      console.log(
-        `    LM Studio Stats: ${stats.promptTokensCount || "N/A"} prompt, ${
-          stats.predictedTokensCount || "N/A"
-        } completion, ${stats.totalTokensCount || "N/A"} total`,
-      );
-    }
-
-    // Filter out empty or invalid chunks
+    // Filter out empty or invalid chunks and provide single status log
     if (content.trim() !== "EMPTY_CHUNK" && content.trim().length > 10) {
       allResults.push(content);
-
-      // console.log(`📄 Response from LM Studio (${model}) - Chunk ${i + 1}:`);
-      // console.log(content);
-      console.log(`Content length: ${content.length} characters\n`);
+      const tokensPerSec = stats?.tokensPerSecond?.toFixed(2) || "N/A";
+      const ttft = stats?.timeToFirstTokenSec ? (stats.timeToFirstTokenSec * 1000).toFixed(0) + "ms" : "N/A";
+      console.log(`Processed chunk ${i + 1}/${imagesToProcess.length} (${currentImagePath}): ${tokensPerSec} tok/sec, ${ttft} TTFT, ${(apiDuration / 1000).toFixed(2)}s generation, ${content.length} chars extracted`);
     } else {
-      console.log(`Skipping chunk ${i + 1} - Empty or invalid content`);
+      console.log(`Skipped chunk ${i + 1}/${imagesToProcess.length} (${currentImagePath}): Empty or invalid content`);
     }
   }
 }
