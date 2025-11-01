@@ -202,20 +202,16 @@ export function calculateAverageStats(stats: GPUStats[]): GPUStats {
     );
   }
 
-  // Token metrics - keep totals for these
-  if (totals.tokensGenerated) averages.tokensGenerated = totals.tokensGenerated; // Total across all chunks
-  if (totals.estimatedTokens) averages.estimatedTokens = totals.estimatedTokens; // Total across all chunks
-  if (totals.completionTokens) {
-    averages.completionTokens = totals.completionTokens; // Total across all chunks
-  }
-  if (totals.promptTokens) averages.promptTokens = totals.promptTokens; // Total across all chunks
-  if (totals.totalTokens) averages.totalTokens = totals.totalTokens; // Total across all chunks
-  if (totals.inputTokens) averages.inputTokens = totals.inputTokens; // Total across all chunks
-  if (totals.outputTokens) averages.outputTokens = totals.outputTokens; // Total across all chunks
-  if (totals.imageTokens) averages.imageTokens = totals.imageTokens; // Total across all chunks
-  if (totals.textPromptTokens) {
-    averages.textPromptTokens = totals.textPromptTokens; // Total across all chunks
-  }
+  // Token metrics - keep totals for these, not averages
+  if (totals.tokensGenerated) averages.tokensGenerated = totals.tokensGenerated;
+  if (totals.estimatedTokens) averages.estimatedTokens = totals.estimatedTokens;
+  if (totals.completionTokens) averages.completionTokens = totals.completionTokens;
+  if (totals.promptTokens) averages.promptTokens = totals.promptTokens;
+  if (totals.totalTokens) averages.totalTokens = totals.totalTokens;
+  if (totals.inputTokens) averages.inputTokens = totals.inputTokens;
+  if (totals.outputTokens) averages.outputTokens = totals.outputTokens;
+  if (totals.imageTokens) averages.imageTokens = totals.imageTokens;
+  if (totals.textPromptTokens) averages.textPromptTokens = totals.textPromptTokens;
 
   // Calculate average draft acceptance rate
   if (
@@ -424,15 +420,16 @@ export function showChunkPerformanceSummary() {
     console.log(`\n⚡ Individual Chunk Performance Summary:`);
     chunkStats.forEach((stat, index) => {
       if (stat.tokensPerSecond && stat.timeToFirstToken) {
-        const outputTokens = stat.outputTokens || stat.completionTokens ||
-          stat.estimatedTokens || 0;
+        // Use actual output tokens from LM Studio stats when available
+        const outputTokens = stat.outputTokens || stat.completionTokens || 0;
         const imageTokens = stat.imageTokens || 0;
         const textTokens = stat.textPromptTokens || 0;
         const totalInputTokens = textTokens + imageTokens;
+        const generationTimeMs = stat.generationTime ? stat.generationTime.toFixed(0) : 'N/A';
         console.log(
           `- Chunk ${index + 1}: ${stat.tokensPerSecond.toFixed(2)} tok/sec, ${
             (stat.timeToFirstToken * 1000).toFixed(0)
-          }ms TTFT`,
+          }ms TTFT, ${generationTimeMs}ms total`,
         );
         console.log(
           `  ${textTokens} text + ${imageTokens} image = ${totalInputTokens} in, ${outputTokens} out tokens`,
@@ -440,7 +437,7 @@ export function showChunkPerformanceSummary() {
       }
     });
 
-    // Show total tokens generated with breakdown
+    // Show total tokens generated with breakdown using actual API data
     const totalImageTokens = chunkStats.reduce(
       (sum, stat) => sum + (stat.imageTokens || 0),
       0,
@@ -449,12 +446,9 @@ export function showChunkPerformanceSummary() {
       (sum, stat) => sum + (stat.textPromptTokens || 0),
       0,
     );
-    const totalInputTokens = totalTextTokens + totalImageTokens; // Calculate from actual text + image tokens
+    const totalInputTokens = totalTextTokens + totalImageTokens;
     const totalOutputTokens = chunkStats.reduce(
-      (sum, stat) =>
-        sum +
-        (stat.outputTokens || stat.completionTokens || stat.estimatedTokens ||
-          0),
+      (sum, stat) => sum + (stat.outputTokens || stat.completionTokens || 0),
       0,
     );
 
@@ -546,24 +540,20 @@ export function displayGPUStats(
     }
 
     // Token generation metrics with breakdown
-    // Use our calculated text + image tokens instead of LM Studio's prompt count
+    // Use actual token counts from LM Studio API when available
     const imageTokens = combinedGPUStats.imageTokens || 0;
     const textTokens = combinedGPUStats.textPromptTokens || 0;
     const calculatedInputTokens = imageTokens + textTokens;
+    
+    // Prefer actual API token counts over estimates
+    const outputTokens = combinedGPUStats.outputTokens ||
+      combinedGPUStats.completionTokens || 0;
 
-    if (
-      combinedGPUStats.inputTokens || combinedGPUStats.outputTokens ||
-      calculatedInputTokens > 0
-    ) {
-      const inputTokens = calculatedInputTokens ||
-        combinedGPUStats.inputTokens || combinedGPUStats.promptTokens || 0;
-      const outputTokens = combinedGPUStats.outputTokens ||
-        combinedGPUStats.completionTokens || combinedGPUStats.tokensGenerated ||
-        0;
-      const totalTokens = inputTokens + outputTokens;
+    if (calculatedInputTokens > 0 || outputTokens > 0) {
+      const totalTokens = calculatedInputTokens + outputTokens;
 
       console.log(
-        `- Token Usage: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total tokens`,
+        `- Token Usage: ${calculatedInputTokens} input + ${outputTokens} output = ${totalTokens} total tokens`,
       );
 
       // Show image vs text breakdown if available
@@ -572,24 +562,13 @@ export function displayGPUStats(
           `- Input Breakdown: ${textTokens} text prompt + ${imageTokens} image tokens`,
         );
       }
-    } else if (
-      combinedGPUStats.tokensGenerated || combinedGPUStats.estimatedTokens
-    ) {
-      const totalTokens = combinedGPUStats.tokensGenerated ||
-        combinedGPUStats.estimatedTokens || 0;
-      const tokenType = combinedGPUStats.tokensGenerated
-        ? "actual"
-        : "estimated";
-      console.log(
-        `- Total Tokens Generated: ${totalTokens} tokens (${tokenType})`,
-      );
     }
 
     // Additional token details if available
-    if (combinedGPUStats.completionTokens && !combinedGPUStats.outputTokens) {
+    if (combinedGPUStats.completionTokens) {
       console.log(`- Completion Tokens: ${combinedGPUStats.completionTokens}`);
     }
-    if (combinedGPUStats.promptTokens && calculatedInputTokens > 0) {
+    if (combinedGPUStats.promptTokens) {
       console.log(
         `- Prompt Tokens (LM Studio API): ${combinedGPUStats.promptTokens}`,
       );
@@ -786,36 +765,43 @@ Only extract information that is clearly visible and relevant to this receipt tr
     // Get prediction stats from the response
     const stats = response.stats;
 
-    // Estimate tokens from content (rough approximation: ~4 characters per token)
+    // Use actual stats from LM Studio when available, fall back to estimates
     const estimatedTokensFromContent = Math.round(content.length / 4);
-    const totalTokensGenerated = stats
-      ? stats.predictedTokensCount
-      : estimatedTokensFromContent;
+    const totalTokensGenerated = stats?.predictedTokensCount || estimatedTokensFromContent;
 
-    // Estimate token breakdown between text prompt and image
+    // Use actual prompt token count from LM Studio API
+    const actualPromptTokens = stats?.promptTokensCount || 0;
+    
+    // Calculate token breakdown using known values from LM Studio debug logs
     const estimatedTextTokens = Math.round(prompt.length / 4);
-    // Gemma 3 27B uses 256 tokens per 896x896 image according to HuggingFace docs
-    const imageTokensPerImage = 256;
-    const estimatedImageTokens = imageTokensPerImage; // We're processing one image per chunk
+    // From LM Studio debug logs: "Evaluated 259 tokens for image [idx: 4]"
+    const imageTokensPerImage = 259;
+    
+    // Use the actual breakdown: 
+    // - Image tokens are consistently 259 per image (from debug logs)
+    // - Text tokens can be calculated from total prompt tokens minus image tokens
+    const actualImageTokens = imageTokensPerImage;
+    const actualTextTokens = actualPromptTokens > imageTokensPerImage 
+      ? actualPromptTokens - imageTokensPerImage
+      : estimatedTextTokens;
 
     const chunkStat: GPUStats = {
-      tokensPerSecond: stats ? stats.tokensPerSecond : undefined,
-      timeToFirstToken: stats ? stats.timeToFirstTokenSec : undefined,
+      // Use actual performance metrics from LM Studio
+      tokensPerSecond: stats?.tokensPerSecond,
+      timeToFirstToken: stats?.timeToFirstTokenSec,
       generationTime: apiDuration,
-      stopReason: stats ? stats.stopReason : undefined,
-      // Token generation metrics
+      stopReason: stats?.stopReason,
+      // Token generation metrics - prefer actual over estimated
       estimatedTokens: estimatedTokensFromContent,
-      tokensGenerated: totalTokensGenerated || 0,
-      promptTokens: stats
-        ? stats.promptTokensCount
-        : estimatedTextTokens + estimatedImageTokens,
-      completionTokens: stats
-        ? stats.predictedTokensCount
-        : estimatedTokensFromContent,
-      totalTokens: stats ? stats.totalTokensCount : undefined,
-      // Image-specific token breakdown
-      imageTokens: estimatedImageTokens,
-      textPromptTokens: estimatedTextTokens,
+      tokensGenerated: totalTokensGenerated,
+      promptTokens: actualPromptTokens,
+      completionTokens: stats?.predictedTokensCount || estimatedTokensFromContent,
+      totalTokens: stats?.totalTokensCount,
+      // Token breakdown using consistent logic
+      imageTokens: actualImageTokens,
+      textPromptTokens: actualTextTokens,
+      inputTokens: actualPromptTokens,
+      outputTokens: stats?.predictedTokensCount || estimatedTokensFromContent,
     };
 
     // Store stats for this chunk
@@ -830,7 +816,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
       : "N/A";
     console.log(`        Performance: ${tokensPerSec} tok/sec, ${ttft} TTFT`);
     console.log(
-      `             Tokens: ~${estimatedTextTokens} text + ~${estimatedImageTokens} image, ${
+      `             Tokens: ~${actualTextTokens} text + ~${actualImageTokens} image, ${
         totalTokensGenerated || 0
       } generated`,
     );

@@ -302,5 +302,3 @@ IMPORTANT: If this image chunk contains mostly empty space, respond with "EMPTY_
    - Verify input image quality
 
 ## LM Studio output for chunk4 of test data
-
-![alt text](<Lm studio out.png>)
