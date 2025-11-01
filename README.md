@@ -25,7 +25,7 @@ TypeScript-based OCR system for extracting text from receipt images using LM Stu
 deno run --allow-read --allow-write --allow-net main.ts path/to/receipt.jpg [model_name]
 
 # Example with specific model
-deno run --allow-read --allow-write --allow-net main.ts ./data/auto_cropped.jpg google/gemma-3-27b
+deno run --allow-read --allow-write --allow-net main.ts ./auto_cropped.jpg google/gemma-3-27b
 ```
 
 ## File Structure
@@ -34,11 +34,9 @@ deno run --allow-read --allow-write --allow-net main.ts ./data/auto_cropped.jpg 
 imageParser/
 ├── main.ts                    # Main OCR processing script
 ├── image_normalizer.ts        # Image normalization utilities
-├── data/                      # Sample images and outputs
-│   ├── auto_cropped.jpg       # Example receipt image
-│   ├── auto_cropped_normalized_*.jpg  # Generated chunks
-│   └── auto_cropped_extracted_text.txt # Final text output
-└── README.md                  # This file
+├── auto_cropped.jpg           # Example receipt image
+├── auto_cropped_extracted_text.txt # Final text output
+└── README.md                       # This file
 ```
 
 ## How It Works
@@ -94,7 +92,7 @@ The system includes advanced algorithms to handle overlapping text:
 ## Example Output
 
 ### Input Image
-![Receipt Example](./data/auto_cropped.jpg)
+![Receipt Example](./auto_cropped.jpg)
 
 ### Processing Results
 
@@ -141,7 +139,7 @@ VAT 336.04 50.41 386.45
 VAT TOTALS 635.50 50.41 685.91
 ```
 
-*Complete output saved to: `./data/auto_cropped_extracted_text.txt`*
+*Complete output saved to: `./auto_cropped_extracted_text.txt`*
 
 ## Configuration
 
