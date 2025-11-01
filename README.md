@@ -1,12 +1,17 @@
 # Receipt OCR Parser with Image Normalization
 
-TypeScript-based OCR system for extracting text from receipt images using LM Studio vision models. The system handles long receipts by chunking them into optimal segments and provides some text deduplication features.
+TypeScript-based OCR system for extracting text from receipt images using LM
+Studio vision models. The system handles long receipts by chunking them into
+optimal segments and provides some text deduplication features.
 
 ## Features
 
-- **Smart Image Normalization**: Automatically detects and handles long receipts by chunking them into 896x896 segments
-- **Text Deduplication**: Intelligently removes overlapping text between chunks to create seamless output
-- **Multiple Processing Methods**: Supports letterbox, crop, stretch, and chunk normalization methods
+- **Smart Image Normalization**: Automatically detects and handles long receipts
+  by chunking them into 896x896 segments
+- **Text Deduplication**: Intelligently removes overlapping text between chunks
+  to create seamless output
+- **Multiple Processing Methods**: Supports letterbox, crop, stretch, and chunk
+  normalization methods
 - **Performance Metrics**: Detailed timing information for optimization
 - **Automatic Text Export**: Saves final consolidated text to `.txt` files
 
@@ -43,14 +48,17 @@ imageParser/
 
 ### 1. Image Normalization (`image_normalizer.ts`)
 
-The system uses sophisticated image processing to handle various receipt formats:
+The system uses sophisticated image processing to handle various receipt
+formats:
 
 #### **Chunking Method** (Default for long receipts)
+
 - Detects receipts with aspect ratio > 1.5
 - Splits into 896x896 chunks with configurable overlap (default: 100px)
 - Maintains aspect ratio and quality
 
 #### **Other Methods**
+
 - **Letterbox**: Preserves aspect ratio, adds padding
 - **Crop**: Preserves aspect ratio, crops excess
 - **Stretch**: Stretches to exact dimensions
@@ -58,12 +66,12 @@ The system uses sophisticated image processing to handle various receipt formats
 ```typescript
 // Example normalization options
 const options = {
-    method: 'chunk',
-    targetWidth: 896,
-    targetHeight: 896,
-    chunkOverlap: 100,
-    jpegQuality: 85,
-    applyPreprocessing: false
+  method: "chunk",
+  targetWidth: 896,
+  targetHeight: 896,
+  chunkOverlap: 100,
+  jpegQuality: 85,
+  applyPreprocessing: false,
 };
 ```
 
@@ -92,7 +100,9 @@ The system includes advanced algorithms to handle overlapping text:
 ## Example Output
 
 ### Input Image
-![Receipt Example](./auto_cropped.jpg) 
+
+![Receipt Example](./auto_cropped.jpg)
+
 ```
 WILLOWBRIDGE
 North Shopping Centre, Tyger Valley
@@ -187,7 +197,7 @@ VAT TOTALS 635.50 50.41 685.91
 - Stop Reason: eosFound
 ```
 
-*Complete output saved to: `./auto_cropped_extracted_text.txt`*
+_Complete output saved to: `./auto_cropped_extracted_text.txt`_
 
 ## Configuration
 
@@ -211,17 +221,18 @@ const DEFAULT_MODEL = "llava";
 ```typescript
 // Available in normalizeImage() function
 interface ImageNormalizationOptions {
-  targetWidth?: number;        // Default: 896
-  targetHeight?: number;       // Default: 896
-  method?: 'letterbox' | 'crop' | 'stretch' | 'chunk';
-  chunkOverlap?: number;       // Default: 50 (100 recommended for receipts)
-  jpegQuality?: number;        // Default: 85
+  targetWidth?: number; // Default: 896
+  targetHeight?: number; // Default: 896
+  method?: "letterbox" | "crop" | "stretch" | "chunk";
+  chunkOverlap?: number; // Default: 50 (100 recommended for receipts)
+  jpegQuality?: number; // Default: 85
   applyPreprocessing?: boolean; // Default: false
   sharpeningStrength?: number; // Default: 1.0
-  contrastFactor?: number;     // Default: 1.5
-  thresholdValue?: number;     // Default: 128
+  contrastFactor?: number; // Default: 1.5
+  thresholdValue?: number; // Default: 128
 }
 ```
+
 ## Use Cases
 
 - **Retail Receipt Processing**: Extract itemized purchases and totals
@@ -235,6 +246,7 @@ interface ImageNormalizationOptions {
 ### Chunk Overlap Strategy
 
 The system uses overlapping chunks to ensure no text is lost at boundaries:
+
 - Default overlap: 100px (configurable)
 - Smart detection of duplicate content
 - Fuzzy matching for OCR variations
@@ -290,4 +302,5 @@ IMPORTANT: If this image chunk contains mostly empty space, respond with "EMPTY_
    - Verify input image quality
 
 ## LM Studio output for chunk4 of test data
+
 ![alt text](<Lm studio out.png>)

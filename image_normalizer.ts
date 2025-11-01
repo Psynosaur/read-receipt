@@ -1,4 +1,4 @@
-import {Image} from "jsr:@matmen/imagescript";
+import { Image } from "jsr:@matmen/imagescript";
 
 /**
  * Image normalization options
@@ -9,7 +9,7 @@ export interface ImageNormalizationOptions {
   /** Target height (default: 896) */
   targetHeight?: number;
   /** Normalization method */
-  method?: 'letterbox' | 'crop' | 'stretch' | 'chunk';
+  method?: "letterbox" | "crop" | "stretch" | "chunk";
   /** Background color for letterboxing (RGBA format, default: white) */
   backgroundColor?: number;
   /** JPEG quality for output (1-100, default: 85) */
@@ -44,21 +44,21 @@ export interface NormalizationResult {
 
 /**
  * Normalize an image to specified dimensions (default 896x896)
- * 
+ *
  * @param inputPath Path to input image
  * @param outputPath Path to save normalized image
  * @param options Normalization options
  * @returns Normalization result details
  */
 export async function normalizeImage(
-  inputPath: string, 
-  outputPath: string, 
-  options: ImageNormalizationOptions = {}
+  inputPath: string,
+  outputPath: string,
+  options: ImageNormalizationOptions = {},
 ): Promise<NormalizationResult> {
   const {
     targetWidth = 896,
     targetHeight = 896,
-    method = 'letterbox',
+    method = "letterbox",
     backgroundColor = 0xFFFFFFFF, // White background
     jpegQuality = 85,
     applyPreprocessing = false,
@@ -66,7 +66,7 @@ export async function normalizeImage(
     contrastFactor = 1.5,
     thresholdValue = 128,
     chunkOverlap = 50,
-    chunkThreshold = 1.5
+    chunkThreshold = 1.5,
   } = options;
 
   console.log(`🎯 Normalizing image: ${inputPath} → ${outputPath}`);
@@ -76,22 +76,33 @@ export async function normalizeImage(
   // Load the image
   const imageData = await Deno.readFile(inputPath);
   const image = await Image.decode(imageData);
-  
+
   const originalWidth = image.width;
   const originalHeight = image.height;
-  
+
   console.log(`📏 Original dimensions: ${originalWidth}x${originalHeight}`);
 
   // Check if we need to chunk the image (for very long receipts)
   const aspectRatio = originalHeight / originalWidth;
-  const shouldChunk = method === 'chunk' || (aspectRatio > chunkThreshold && originalHeight > targetHeight * 1.2);
+  const shouldChunk = method === "chunk" ||
+    (aspectRatio > chunkThreshold && originalHeight > targetHeight * 1.2);
 
   if (shouldChunk) {
-    console.log(`📄 Long receipt detected (aspect ratio: ${aspectRatio.toFixed(2)}), creating chunks...`);
+    console.log(
+      `📄 Long receipt detected (aspect ratio: ${
+        aspectRatio.toFixed(2)
+      }), creating chunks...`,
+    );
     return await normalizeWithChunking(
-      image, inputPath, outputPath, targetWidth, targetHeight,
-      chunkOverlap, jpegQuality, applyPreprocessing,
-      { sharpeningStrength, contrastFactor, thresholdValue }
+      image,
+      inputPath,
+      outputPath,
+      targetWidth,
+      targetHeight,
+      chunkOverlap,
+      jpegQuality,
+      applyPreprocessing,
+      { sharpeningStrength, contrastFactor, thresholdValue },
     );
   }
 
@@ -100,26 +111,44 @@ export async function normalizeImage(
   let scaleFactor = 1;
 
   switch (method) {
-    case 'letterbox':
+    case "letterbox":
       // Preserve aspect ratio, add padding if needed
-      normalizedImage = await normalizeWithLetterbox(image, targetWidth, targetHeight, backgroundColor);
+      normalizedImage = await normalizeWithLetterbox(
+        image,
+        targetWidth,
+        targetHeight,
+        backgroundColor,
+      );
       aspectRatioPreserved = true;
-      scaleFactor = Math.min(targetWidth / originalWidth, targetHeight / originalHeight);
+      scaleFactor = Math.min(
+        targetWidth / originalWidth,
+        targetHeight / originalHeight,
+      );
       break;
 
-    case 'crop':
+    case "crop":
       // Preserve aspect ratio, crop excess if needed
-      normalizedImage = await normalizeWithCrop(image, targetWidth, targetHeight);
+      normalizedImage = await normalizeWithCrop(
+        image,
+        targetWidth,
+        targetHeight,
+      );
       aspectRatioPreserved = true;
-      scaleFactor = Math.max(targetWidth / originalWidth, targetHeight / originalHeight);
+      scaleFactor = Math.max(
+        targetWidth / originalWidth,
+        targetHeight / originalHeight,
+      );
       break;
 
-    case 'stretch':
+    case "stretch":
       // Stretch to exact dimensions, may distort aspect ratio
       normalizedImage = image.clone();
       normalizedImage.resize(targetWidth, targetHeight);
       aspectRatioPreserved = false;
-      scaleFactor = Math.min(targetWidth / originalWidth, targetHeight / originalHeight);
+      scaleFactor = Math.min(
+        targetWidth / originalWidth,
+        targetHeight / originalHeight,
+      );
       break;
 
     // case 'chunk':
@@ -131,7 +160,9 @@ export async function normalizeImage(
   }
 
   console.log(`📊 Scale factor: ${scaleFactor.toFixed(3)}`);
-  console.log(`📐 Final dimensions: ${normalizedImage.width}x${normalizedImage.height}`);
+  console.log(
+    `📐 Final dimensions: ${normalizedImage.width}x${normalizedImage.height}`,
+  );
 
   // Apply preprocessing if requested
   if (applyPreprocessing) {
@@ -139,7 +170,7 @@ export async function normalizeImage(
     await applyImagePreprocessing(normalizedImage, {
       sharpeningStrength,
       contrastFactor,
-      thresholdValue
+      thresholdValue,
     });
   }
 
@@ -149,11 +180,14 @@ export async function normalizeImage(
 
   const result: NormalizationResult = {
     originalDimensions: { width: originalWidth, height: originalHeight },
-    normalizedDimensions: { width: normalizedImage.width, height: normalizedImage.height },
+    normalizedDimensions: {
+      width: normalizedImage.width,
+      height: normalizedImage.height,
+    },
     method,
     aspectRatioPreserved,
     scaleFactor,
-    outputSize: output.length
+    outputSize: output.length,
   };
 
   console.log(`💾 Saved normalized image: ${outputPath}`);
@@ -167,42 +201,42 @@ export async function normalizeImage(
  * Normalize image using letterbox method (preserve aspect ratio, add padding)
  */
 async function normalizeWithLetterbox(
-  image: Image, 
-  targetWidth: number, 
-  targetHeight: number, 
-  backgroundColor: number
+  image: Image,
+  targetWidth: number,
+  targetHeight: number,
+  backgroundColor: number,
 ): Promise<Image> {
   const originalWidth = image.width;
   const originalHeight = image.height;
-  
+
   // Calculate scale factor to fit within target dimensions
   const scaleX = targetWidth / originalWidth;
   const scaleY = targetHeight / originalHeight;
   const scale = Math.min(scaleX, scaleY);
-  
+
   // Calculate new dimensions
   const newWidth = Math.round(originalWidth * scale);
   const newHeight = Math.round(originalHeight * scale);
-  
+
   console.log(`  📏 Scaled dimensions: ${newWidth}x${newHeight}`);
-  
+
   // Resize the image
   const resized = image.clone();
   resized.resize(newWidth, newHeight);
-  
+
   // Create target canvas with background color
   const canvas = new Image(targetWidth, targetHeight);
   canvas.fill(backgroundColor);
-  
+
   // Calculate position to center the resized image
   const offsetX = Math.round((targetWidth - newWidth) / 2);
   const offsetY = Math.round((targetHeight - newHeight) / 2);
-  
+
   console.log(`  📍 Offset: (${offsetX}, ${offsetY})`);
-  
+
   // Composite the resized image onto the canvas
   canvas.composite(resized, offsetX, offsetY);
-  
+
   return canvas;
 }
 
@@ -210,37 +244,37 @@ async function normalizeWithLetterbox(
  * Normalize image using crop method (preserve aspect ratio, crop excess)
  */
 async function normalizeWithCrop(
-  image: Image, 
-  targetWidth: number, 
-  targetHeight: number
+  image: Image,
+  targetWidth: number,
+  targetHeight: number,
 ): Promise<Image> {
   const originalWidth = image.width;
   const originalHeight = image.height;
-  
+
   // Calculate scale factor to fill target dimensions
   const scaleX = targetWidth / originalWidth;
   const scaleY = targetHeight / originalHeight;
   const scale = Math.max(scaleX, scaleY);
-  
+
   // Calculate new dimensions
   const newWidth = Math.round(originalWidth * scale);
   const newHeight = Math.round(originalHeight * scale);
-  
+
   console.log(`  📏 Scaled dimensions: ${newWidth}x${newHeight}`);
-  
+
   // Resize the image
   const resized = image.clone();
   resized.resize(newWidth, newHeight);
-  
+
   // Calculate crop position to center the crop
   const cropX = Math.round((newWidth - targetWidth) / 2);
   const cropY = Math.round((newHeight - targetHeight) / 2);
-  
+
   console.log(`  ✂️  Crop position: (${cropX}, ${cropY})`);
-  
+
   // Crop to target dimensions
   resized.crop(cropX, cropY, targetWidth, targetHeight);
-  
+
   return resized;
 }
 
@@ -253,25 +287,29 @@ async function applyImagePreprocessing(
     sharpeningStrength: number;
     contrastFactor: number;
     thresholdValue: number;
-  }
+  },
 ): Promise<void> {
   const { sharpeningStrength, contrastFactor, thresholdValue } = options;
-  
+
   // Apply sharpening
   if (sharpeningStrength > 0) {
     console.log(`  ✨ Applying sharpening (strength: ${sharpeningStrength})`);
     await applySharpeningFilter(image, sharpeningStrength);
   }
-  
+
   // Apply contrast enhancement
   if (contrastFactor !== 1.0) {
-    console.log(`  🎨 Applying contrast enhancement (factor: ${contrastFactor})`);
+    console.log(
+      `  🎨 Applying contrast enhancement (factor: ${contrastFactor})`,
+    );
     await applyContrastEnhancement(image, contrastFactor);
   }
-  
+
   // Apply threshold transformation
   if (thresholdValue > 0 && thresholdValue < 255) {
-    console.log(`  🎯 Applying threshold transformation (threshold: ${thresholdValue})`);
+    console.log(
+      `  🎯 Applying threshold transformation (threshold: ${thresholdValue})`,
+    );
     await applyThresholdTransformation(image, thresholdValue);
   }
 }
@@ -279,10 +317,13 @@ async function applyImagePreprocessing(
 /**
  * Apply sharpening filter using unsharp mask
  */
-async function applySharpeningFilter(image: Image, strength: number): Promise<void> {
+async function applySharpeningFilter(
+  image: Image,
+  strength: number,
+): Promise<void> {
   const width = image.width;
   const height = image.height;
-  
+
   // Create a copy for calculation
   const originalPixels: number[][] = [];
   for (let y = 0; y < height; y++) {
@@ -291,41 +332,51 @@ async function applySharpeningFilter(image: Image, strength: number): Promise<vo
       originalPixels[y][x] = image.getPixelAt(x + 1, y + 1);
     }
   }
-  
+
   // Apply sharpening kernel
   const kernel = [
     [0, -1, 0],
     [-1, 5, -1],
-    [0, -1, 0]
+    [0, -1, 0],
   ];
-  
+
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       let r = 0, g = 0, b = 0;
-      
+
       for (let ky = 0; ky < 3; ky++) {
         for (let kx = 0; kx < 3; kx++) {
           const pixel = originalPixels[y + ky - 1][x + kx - 1];
           const weight = kernel[ky][kx];
-          
+
           r += ((pixel >>> 24) & 0xFF) * weight;
           g += ((pixel >>> 16) & 0xFF) * weight;
           b += ((pixel >>> 8) & 0xFF) * weight;
         }
       }
-      
+
       const originalPixel = originalPixels[y][x];
       const originalR = (originalPixel >>> 24) & 0xFF;
       const originalG = (originalPixel >>> 16) & 0xFF;
       const originalB = (originalPixel >>> 8) & 0xFF;
       const originalA = originalPixel & 0xFF;
-      
+
       // Blend with original based on strength
-      const finalR = Math.max(0, Math.min(255, originalR + (r - originalR) * strength));
-      const finalG = Math.max(0, Math.min(255, originalG + (g - originalG) * strength));
-      const finalB = Math.max(0, Math.min(255, originalB + (b - originalB) * strength));
-      
-      const newRgba = (finalR << 24) | (finalG << 16) | (finalB << 8) | originalA;
+      const finalR = Math.max(
+        0,
+        Math.min(255, originalR + (r - originalR) * strength),
+      );
+      const finalG = Math.max(
+        0,
+        Math.min(255, originalG + (g - originalG) * strength),
+      );
+      const finalB = Math.max(
+        0,
+        Math.min(255, originalB + (b - originalB) * strength),
+      );
+
+      const newRgba = (finalR << 24) | (finalG << 16) | (finalB << 8) |
+        originalA;
       image.setPixelAt(x + 1, y + 1, newRgba);
     }
   }
@@ -334,10 +385,13 @@ async function applySharpeningFilter(image: Image, strength: number): Promise<vo
 /**
  * Apply contrast enhancement
  */
-async function applyContrastEnhancement(image: Image, factor: number): Promise<void> {
+async function applyContrastEnhancement(
+  image: Image,
+  factor: number,
+): Promise<void> {
   const width = image.width;
   const height = image.height;
-  
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const rgba = image.getPixelAt(x + 1, y + 1);
@@ -345,12 +399,12 @@ async function applyContrastEnhancement(image: Image, factor: number): Promise<v
       const g = (rgba >>> 16) & 0xFF;
       const b = (rgba >>> 8) & 0xFF;
       const a = rgba & 0xFF;
-      
+
       // Apply contrast around midpoint (128)
       const newR = Math.max(0, Math.min(255, (r - 128) * factor + 128));
       const newG = Math.max(0, Math.min(255, (g - 128) * factor + 128));
       const newB = Math.max(0, Math.min(255, (b - 128) * factor + 128));
-      
+
       const newRgba = (newR << 24) | (newG << 16) | (newB << 8) | a;
       image.setPixelAt(x + 1, y + 1, newRgba);
     }
@@ -360,7 +414,10 @@ async function applyContrastEnhancement(image: Image, factor: number): Promise<v
 /**
  * Apply threshold transformation (convert to black/white)
  */
-async function applyThresholdTransformation(image: Image, threshold: number): Promise<void> {
+async function applyThresholdTransformation(
+  image: Image,
+  threshold: number,
+): Promise<void> {
   const width = image.width;
   const height = image.height;
 
@@ -400,7 +457,7 @@ async function normalizeWithChunking(
     sharpeningStrength: number;
     contrastFactor: number;
     thresholdValue: number;
-  }
+  },
 ): Promise<NormalizationResult> {
   const originalWidth = image.width;
   const originalHeight = image.height;
@@ -424,8 +481,8 @@ async function normalizeWithChunking(
   console.log(`  📄 Creating ${totalChunks} chunks with ${overlap}px overlap`);
 
   const chunkPaths: string[] = [];
-  const baseOutputPath = outputPath.replace(/\.[^.]+$/, ''); // Remove extension
-  const extension = outputPath.match(/\.[^.]+$/)?.[0] || '.jpg';
+  const baseOutputPath = outputPath.replace(/\.[^.]+$/, ""); // Remove extension
+  const extension = outputPath.match(/\.[^.]+$/)?.[0] || ".jpg";
 
   for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
     const startY = chunkIndex * chunkHeight;
@@ -435,11 +492,19 @@ async function normalizeWithChunking(
     // Skip chunks that are too small to contain meaningful content
     const minChunkHeight = Math.min(200, targetHeight * 0.3); // At least 200px or 30% of target height
     if (actualChunkHeight < minChunkHeight) {
-      console.log(`  ⏭️  Skipping chunk ${chunkIndex + 1}/${totalChunks} - too small (${actualChunkHeight}px < ${minChunkHeight}px)`);
+      console.log(
+        `  ⏭️  Skipping chunk ${
+          chunkIndex + 1
+        }/${totalChunks} - too small (${actualChunkHeight}px < ${minChunkHeight}px)`,
+      );
       continue;
     }
 
-    console.log(`  📋 Processing chunk ${chunkIndex + 1}/${totalChunks} (y: ${startY}-${endY})`);
+    console.log(
+      `  📋 Processing chunk ${
+        chunkIndex + 1
+      }/${totalChunks} (y: ${startY}-${endY})`,
+    );
 
     // Create chunk
     const chunk = scaledImage.clone();
@@ -468,7 +533,11 @@ async function normalizeWithChunking(
     await Deno.writeFile(chunkPath, chunkOutput);
 
     chunkPaths.push(chunkPath);
-    console.log(`    💾 Saved chunk: ${chunkPath} (${(chunkOutput.length / 1024).toFixed(1)} KB)`);
+    console.log(
+      `    💾 Saved chunk: ${chunkPath} (${
+        (chunkOutput.length / 1024).toFixed(1)
+      } KB)`,
+    );
   }
 
   // Calculate total output size
@@ -484,16 +553,18 @@ async function normalizeWithChunking(
   const result: NormalizationResult = {
     originalDimensions: { width: originalWidth, height: originalHeight },
     normalizedDimensions: { width: targetWidth, height: targetHeight },
-    method: 'chunk',
+    method: "chunk",
     aspectRatioPreserved: true,
     scaleFactor: scaleX,
     outputSize: totalOutputSize,
     chunksCreated: totalChunks,
-    chunkPaths
+    chunkPaths,
   };
 
   console.log(`✅ Chunking complete! Created ${totalChunks} chunks`);
-  console.log(`📊 Total output size: ${(totalOutputSize / 1024).toFixed(1)} KB`);
+  console.log(
+    `📊 Total output size: ${(totalOutputSize / 1024).toFixed(1)} KB`,
+  );
 
   return result;
 }
@@ -501,13 +572,17 @@ async function normalizeWithChunking(
 // CLI usage
 if (import.meta.main) {
   const inputPath = Deno.args[0];
-  const outputPath = Deno.args[1] || inputPath.replace(/\.[^.]+$/, '_normalized.jpg');
-  const method = (Deno.args[2] as 'letterbox' | 'crop' | 'stretch' | 'chunk') || 'letterbox';
+  const outputPath = Deno.args[1] ||
+    inputPath.replace(/\.[^.]+$/, "_normalized.jpg");
+  const method = (Deno.args[2] as "letterbox" | "crop" | "stretch" | "chunk") ||
+    "letterbox";
   const jpegQuality = parseInt(Deno.args[3]) || 85;
   const overlap = parseInt(Deno.args[4]) || 50;
 
   if (!inputPath) {
-    console.error("Usage: deno run --allow-read --allow-write image_normalizer.ts <input> [output] [method] [quality] [overlap]");
+    console.error(
+      "Usage: deno run --allow-read --allow-write image_normalizer.ts <input> [output] [method] [quality] [overlap]",
+    );
     console.error("Methods: letterbox (default), crop, stretch, chunk");
     console.error("Quality: 1-100 (default: 85)");
     console.error("Overlap: pixels for chunk overlap (default: 50)");
@@ -518,7 +593,7 @@ if (import.meta.main) {
     const result = await normalizeImage(inputPath, outputPath, {
       method,
       jpegQuality,
-      chunkOverlap: overlap
+      chunkOverlap: overlap,
     });
 
     if (result.chunksCreated) {
@@ -528,7 +603,10 @@ if (import.meta.main) {
       });
     }
   } catch (error) {
-    console.error("Error:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "Error:",
+      error instanceof Error ? error.message : String(error),
+    );
     Deno.exit(1);
   }
 }
