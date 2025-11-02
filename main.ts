@@ -24,14 +24,41 @@ import {
   showChunkPerformanceSummary,
   timings,
 } from "./utils.ts";
+import {
+  createMetrics,
+  displayMetricsSummary,
+  generateSessionId,
+  saveMetrics,
+  type ProcessingConfig,
+  type SessionData,
+} from "./performance_metrics.ts";
 
 /** Get image path from command line arguments */
 const imagePath = Deno.args[0];
+const model = Deno.args[1] || "google/gemma-3-27b";
 
 if (!imagePath) {
   console.error("Error: Please provide an image file path");
   Deno.exit(1);
 }
+
+// Generate session ID for this processing run
+const sessionId = generateSessionId();
+console.log(`🔄 Starting processing session: ${sessionId}`);
+
+// Variables to track for metrics
+let finalText = "";
+let outputTextPath = "";
+let success = false;
+
+// Configuration used for this run
+const processingConfig: ProcessingConfig = {
+  model: model,
+  method: "chunk",
+  jpegQuality: 85,
+  applyPreprocessing: false,
+  chunkOverlap: 100,
+};
 
 try {
   // Collect initial GPU stats
@@ -45,13 +72,13 @@ try {
 
   const normalizedPath = imagePath.replace(/\.[^.]+$/, "_normalized.jpg");
   const normalizationResult = await normalizeImage(imagePath, normalizedPath, {
-    method: "chunk", // Use chunk
-    jpegQuality: 85,
-    applyPreprocessing: false, // Apply sharpening, contrast, and threshold
-    sharpeningStrength: 1.0, //
+    method: "chunk" as const,
+    jpegQuality: processingConfig.jpegQuality || 85,
+    applyPreprocessing: processingConfig.applyPreprocessing || false,
+    sharpeningStrength: 1.0,
     contrastFactor: 1.5,
     thresholdValue: 128,
-    chunkOverlap: 100, // This seems to work okay
+    chunkOverlap: processingConfig.chunkOverlap || 100,
   });
 
   timings.normalization = performance.now() - normalizationStart;
@@ -69,13 +96,14 @@ try {
   await processImageChunks(imagesToProcess, allResults);
 
   // Process and deduplicate results
-  const finalText = processChunkedText(allResults);
+  finalText = processChunkedText(allResults);
 
   // Optionally save the final output to a text file
   if (finalText && finalText !== "No readable content found") {
-    const outputTextPath = imagePath.replace(/\.[^.]+$/, "_extracted_text.txt");
+    outputTextPath = imagePath.replace(/\.[^.]+$/, "_extracted_text.txt");
     await Deno.writeTextFile(outputTextPath, finalText);
     console.log(`Final text saved to: ${outputTextPath}`);
+    success = true;
   }
 } catch (error) {
   console.error(
@@ -107,4 +135,27 @@ try {
 
   // Display GPU stats if available
   displayGPUStats(combinedGPUStats);
+
+  // Create and save performance metrics
+  console.log("\n💾 Saving performance metrics...");
+  const sessionData: SessionData = {
+    sessionId,
+    inputFilePath: imagePath,
+    config: processingConfig,
+    timings: {
+      normalization: timings.normalization,
+      imageLoad: timings.imageLoad,
+      apiRequest: timings.apiRequest,
+      total: timings.total,
+    },
+    chunkStats,
+    gpuStats: combinedGPUStats,
+    finalText: finalText || "No readable content found",
+    outputFilePath: outputTextPath || "",
+    success,
+  };
+
+  const metrics = await createMetrics(sessionData);
+  await saveMetrics(metrics);
+  displayMetricsSummary(metrics);
 }

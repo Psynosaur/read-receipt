@@ -20,6 +20,7 @@ export interface GPUStats {
   tokensPerSecond?: number;
   timeToFirstToken?: number;
   generationTime?: number;
+  processingTime?: number;
   stopReason?: string;
   draftModel?: string;
   totalDraftTokensCount?: number;
@@ -530,6 +531,9 @@ export async function processImageChunks(
   for (let i = 0; i < imagesToProcess.length; i++) {
     const currentImagePath = imagesToProcess[i];
 
+    // Start timing for this entire chunk
+    const chunkStart = performance.now();
+
     // Prepare image using LM Studio client - start timing
     const imageStart = performance.now();
     const image = await client.files.prepareImage(currentImagePath);
@@ -563,6 +567,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
     const content = response.content;
 
     const apiDuration = performance.now() - apiStart;
+    const chunkDuration = performance.now() - chunkStart;
     timings.apiRequest += apiDuration;
 
     // Get prediction stats from the response
@@ -593,6 +598,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
       tokensPerSecond: stats?.tokensPerSecond,
       timeToFirstToken: stats?.timeToFirstTokenSec,
       generationTime: apiDuration,
+      processingTime: chunkDuration, // Add the full chunk processing time
       stopReason: stats?.stopReason,
       // Token generation metrics - prefer actual over estimated
       estimatedTokens: estimatedTokensFromContent,
