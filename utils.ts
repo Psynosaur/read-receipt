@@ -549,7 +549,7 @@ Extract all textual transcational information writing out put in plain text in o
     }
 
 IMPORTANT: If this image chunk contains mostly empty space, white background, or no readable receipt text, respond with "EMPTY_CHUNK" only.
-Only extract information that is clearly visible and relevant to this receipt transaction.`;
+Only extract information that is clearly visible and relevant to this receipt transaction. NO HTML`;
 
     // Get the model handle
     const modelHandle = await client.llm.model(model);
