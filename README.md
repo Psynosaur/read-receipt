@@ -2,15 +2,6 @@
 
 Built in deno for science.
 
-## Features
-
-- Automatic image chunking for long receipts (896x896 segments)
-- Text deduplication between chunks (partially so)
-- Multiple normalization methods (chunk, letterbox, crop, stretch)
-- Comprehensive performance metrics tracking and storage
-- Automatic text export to `.txt` files
-- Performance analytics and session history
-
 ## Quick Start
 
 **Prerequisites:** [Deno](https://deno.land/), [LM Studio](https://lmstudio.ai/) on port 1234, vision model loaded
