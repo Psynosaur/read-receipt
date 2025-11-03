@@ -3,6 +3,8 @@
  * Handles storing and retrieving performance metrics for image processing operations
  */
 
+import { countOutputTokens } from "./token_utils.ts";
+
 export interface PerformanceMetrics {
   /** Unique identifier for this processing session */
   sessionId: string;
@@ -36,8 +38,12 @@ export interface PerformanceMetrics {
     imageNormalization: number;
     /** Image load and encode time */
     imageLoadEncode: number;
-    /** API request and parse time */
+    /** API request and parse time (excluding model loading) */
     apiRequestParse: number;
+    /** Model loading time (separate from inference) */
+    modelLoading: number;
+    /** Pure inference time (API request time minus model loading) */
+    inferenceTime: number;
     /** Total execution time */
     totalExecution: number;
   };
@@ -60,6 +66,8 @@ export interface PerformanceMetrics {
     totalOutput: number;
     /** Combined total tokens */
     total: number;
+    /** Final output text token count (via gpt-tokenizer) */
+    finalOutputTokens: number;
   };
   /** LM Studio performance statistics */
   lmStudioStats: {
@@ -71,6 +79,14 @@ export interface PerformanceMetrics {
     timeToFirstToken: number;
     /** Generation time in milliseconds */
     generationTime: number;
+    /** Whether model loading was detected during this session */
+    modelLoadingDetected: boolean;
+    /** Model loading time in milliseconds (if detected) */
+    modelLoadingTime?: number;
+    /** When model loading started (ISO timestamp) */
+    modelLoadingStartTime?: string;
+    /** When model loading completed (ISO timestamp) */
+    modelLoadingEndTime?: string;
   };
   /** Output information */
   output: {
@@ -175,6 +191,14 @@ export interface GPUPerformanceStats {
   textPromptTokens?: number;
   outputTokens?: number;
   completionTokens?: number;
+  /** Whether model loading was detected during this session */
+  modelLoadingDetected?: boolean;
+  /** Model loading time in milliseconds (if detected) */
+  modelLoadingTime?: number;
+  /** When model loading started (ISO timestamp) */
+  modelLoadingStartTime?: string;
+  /** When model loading completed (ISO timestamp) */
+  modelLoadingEndTime?: string;
 }
 
 /**
@@ -252,7 +276,9 @@ export async function createMetrics(sessionData: SessionData): Promise<Performan
     timings: {
       imageNormalization: sessionData.timings.normalization || 0,
       imageLoadEncode: sessionData.timings.imageLoad || 0,
-      apiRequestParse: sessionData.timings.apiRequest || 0,
+      apiRequestParse: (sessionData.timings.apiRequest || 0) + (sessionData.gpuStats.modelLoadingTime || 0), // Total API time including loading
+      modelLoading: sessionData.gpuStats.modelLoadingTime || 0,
+      inferenceTime: sessionData.timings.apiRequest || 0, // Pure inference time (loading already excluded)
       totalExecution: sessionData.timings.total || 0,
     },
     chunks: {
@@ -265,12 +291,17 @@ export async function createMetrics(sessionData: SessionData): Promise<Performan
       imageTokens: totalImageTokens,
       totalOutput: totalOutputTokens,
       total: totalInputTokens + totalOutputTokens,
+      finalOutputTokens: countOutputTokens(sessionData.finalText),
     },
     lmStudioStats: {
       modelName: sessionData.gpuStats.modelName || sessionData.config.model || "Unknown",
       tokensPerSecond: sessionData.gpuStats.tokensPerSecond || 0,
       timeToFirstToken: (sessionData.gpuStats.timeToFirstToken || 0) * 1000,
       generationTime: sessionData.gpuStats.generationTime || 0,
+      modelLoadingDetected: sessionData.gpuStats.modelLoadingDetected || false,
+      modelLoadingTime: sessionData.gpuStats.modelLoadingTime,
+      modelLoadingStartTime: sessionData.gpuStats.modelLoadingStartTime,
+      modelLoadingEndTime: sessionData.gpuStats.modelLoadingEndTime,
     },
     output: {
       lines: sessionData.finalText.split("\n").length,
@@ -292,10 +323,29 @@ export function displayMetricsSummary(metrics: PerformanceMetrics): void {
   console.log(`Model: ${metrics.config.model}`);
   console.log(`Chunks: ${metrics.chunks.count}`);
   console.log(`Success: ${metrics.output.success ? "True" : "False"}`);
-  console.log(`Output: ${metrics.output.lines} lines, ${metrics.output.characters} characters`);
-  console.log(`Total Time: ${metrics.timings.totalExecution.toFixed(2)}ms`);
-  console.log(`Tokens: ${metrics.tokens.total} total (${metrics.tokens.totalInput} input + ${metrics.tokens.totalOutput} output)`);
+  console.log(`Output: ${metrics.output.lines} lines, ${metrics.output.characters} characters, ${metrics.tokens.finalOutputTokens} tokens`);
+  
+  // Show detailed timing breakdown
+  console.log(`\nTiming Breakdown:`);
+  console.log(`  Image Normalization: ${metrics.timings.imageNormalization.toFixed(2)}ms`);
+  console.log(`  Image Load & Encode: ${metrics.timings.imageLoadEncode.toFixed(2)}ms`);
+  if (metrics.timings.modelLoading > 0) {
+    console.log(`  Model Loading: ${(metrics.timings.modelLoading / 1000).toFixed(2)}s (one-time cost)`);
+    console.log(`  Pure Inference: ${metrics.timings.inferenceTime.toFixed(2)}ms (all chunks, excluding loading)`);
+  } else {
+    console.log(`  Model Loading: 0ms (already loaded)`);
+    console.log(`  Pure Inference: ${metrics.timings.inferenceTime.toFixed(2)}ms (all chunks)`);
+  }
+  console.log(`  Total API Time: ${metrics.timings.apiRequestParse.toFixed(2)}ms (inference + model loading)`);
+  console.log(`  Total Time: ${metrics.timings.totalExecution.toFixed(2)}ms`);
+  
+  console.log(`\nTokens: ${metrics.tokens.total} total (${metrics.tokens.totalInput} input + ${metrics.tokens.totalOutput} output)`);
   console.log(`Performance: ${metrics.lmStudioStats.tokensPerSecond.toFixed(2)} tok/sec`);
+  
+  // Show model loading information if detected
+  if (metrics.lmStudioStats.modelLoadingDetected) {
+    console.log(`Model Loading Details: ${(metrics.lmStudioStats.modelLoadingTime! / 1000).toFixed(2)}s (${metrics.lmStudioStats.modelLoadingStartTime} → ${metrics.lmStudioStats.modelLoadingEndTime})`);
+  }
 }
 
 /**

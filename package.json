@@ -1,0 +1,24 @@
+{
+  "name": "lms-image-parser",
+  "version": "1.0.0",
+  "description": "Built in deno for science.",
+  "main": "main.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Psynosaur/read-receipt.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Psynosaur/read-receipt/issues"
+  },
+  "homepage": "https://github.com/Psynosaur/read-receipt#readme",
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "gpt-tokenizer": "^3.2.0"
+  }
+}

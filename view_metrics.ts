@@ -77,7 +77,14 @@ function displaySessionDetails(metrics: PerformanceMetrics): void {
   console.log(`\n⏱️  Timing Breakdown:`);
   console.log(`   Image Normalization: ${formatDuration(metrics.timings.imageNormalization)}`);
   console.log(`   Image Load & Encode: ${formatDuration(metrics.timings.imageLoadEncode)}`);
-  console.log(`   API Request & Parse: ${formatDuration(metrics.timings.apiRequestParse)}`);
+  // if (metrics.timings.modelLoading > 0) {
+  //   console.log(`   Model Loading: ${formatDuration(metrics.timings.modelLoading)}`);
+  //   console.log(`   Pure Inference: ${formatDuration(metrics.timings.inferenceTime)}`);
+  // } else {
+  //   console.log(`   Model Loading: 0ms (already loaded)`);
+  //   console.log(`   Pure Inference: ${formatDuration(metrics.timings.apiRequestParse)}`);
+  // }
+  // console.log(`   Total API Time: ${formatDuration(metrics.timings.apiRequestParse)}`);
   console.log(`   Total Execution: ${formatDuration(metrics.timings.totalExecution)}`);
   
   console.log(`\n🧩 Chunk Processing:`);
@@ -90,6 +97,7 @@ function displaySessionDetails(metrics: PerformanceMetrics): void {
   console.log(`\n🎯 Token Usage:`);
   console.log(`   Input Tokens: ${metrics.tokens.totalInput.toLocaleString()} (${metrics.tokens.textTokens.toLocaleString()} text + ${metrics.tokens.imageTokens.toLocaleString()} image)`);
   console.log(`   Output Tokens: ${metrics.tokens.totalOutput.toLocaleString()}`);
+  console.log(`   Final Text Tokens: ${metrics.tokens.finalOutputTokens.toLocaleString()} (gpt-tokenizer)`);
   console.log(`   Total Tokens: ${metrics.tokens.total.toLocaleString()}`);
   
   console.log(`\n🚀 Performance:`);
@@ -123,21 +131,22 @@ async function displayStatistics(): Promise<void> {
  */
 function displaySessionList(sessions: PerformanceMetrics[]): void {
   console.log(`\n📊 Recent Processing Sessions (${sessions.length})`);
-  console.log(`${"─".repeat(150)}`);
-  console.log(`${"Session ID".padEnd(25)} ${"Timestamp".padEnd(20)} ${"File".padEnd(20)} ${"Model".padEnd(20)} ${"Status".padEnd(8)} ${"Time".padEnd(8)} ${"Tok/s".padEnd(8)} ${"Lines".padEnd(8)} ${"Chars".padEnd(8)}`);
-  console.log(`${"─".repeat(150)}`);
+  console.log(`${"─".repeat(125)}`);
+  console.log(`${"Timestamp".padEnd(20)} ${"File".padEnd(20)} ${"Model".padEnd(30)} ${"Status".padEnd(8)} ${"Time".padEnd(8)} ${"Tok/s".padEnd(8)} ${"Lines".padEnd(8)} ${"Chars".padEnd(8)} ${"Tokens".padEnd(8)}`);
+  console.log(`${"─".repeat(125)}`);
   
   sessions.forEach(session => {
     const timestamp = new Date(session.timestamp).toISOString().substring(0, 19);
     const fileName = session.inputFile.name.length > 18 ? session.inputFile.name.substring(0, 15) + "..." : session.inputFile.name;
-    const model = session.config.model.length > 18 ? session.config.model.substring(0, 15) + "..." : session.config.model;
+    const model = session.config.model.length > 28 ? session.config.model.substring(0, 25) + "..." : session.config.model;
     const status = session.output.success ? "✅" : "❌";
     const time = formatDuration(session.timings.totalExecution);
     const tokensPerSec = session.lmStudioStats.tokensPerSecond.toFixed(1);
     const lines = session.output.lines.toString();
     const chars = session.output.characters.toLocaleString();
+    const tokens = session.tokens.finalOutputTokens.toString();
     
-    console.log(`${session.sessionId.substring(0, 24).padEnd(25)} ${timestamp.padEnd(20)} ${fileName.padEnd(20)} ${model.padEnd(20)} ${status.padEnd(8)} ${time.padEnd(8)} ${tokensPerSec.padEnd(8)} ${lines.padEnd(8)} ${chars.padEnd(8)}`);
+    console.log(`${timestamp.padEnd(20)} ${fileName.padEnd(20)} ${model.padEnd(30)} ${status.padEnd(8)} ${time.padEnd(8)} ${tokensPerSec.padEnd(8)} ${lines.padEnd(8)} ${chars.padEnd(8)} ${tokens.padEnd(8)}`);
   });
 }
 

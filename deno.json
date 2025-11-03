@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@lmstudio/sdk": "npm:@lmstudio/sdk@1.5.0",
+    "gpt-tokenizer": "npm:gpt-tokenizer@3.2.0"
+  }
+}

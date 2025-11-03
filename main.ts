@@ -57,14 +57,17 @@ const processingConfig: ProcessingConfig = {
   method: "chunk",
   jpegQuality: 85,
   applyPreprocessing: false,
-  chunkOverlap: 100,
+  chunkOverlap: 150,
 };
 
 try {
   // Collect initial GPU stats
+  const setupStart = performance.now();
   console.log("Collecting GPU performance stats...");
   const initialGPUStats = await collectGPUStats(client);
   Object.assign(gpuStats, initialGPUStats);
+  const setupTime = performance.now() - setupStart;
+  timings.setup = setupTime;
 
   // Normalize image first - start timing
   const normalizationStart = performance.now();
@@ -95,13 +98,25 @@ try {
 
   await processImageChunks(imagesToProcess, allResults);
 
-  // Process and deduplicate results
-  finalText = processChunkedText(allResults);
+  // Process and deduplicate results (don't show full output by default)
+  const textProcessingStart = performance.now();
+  finalText = processChunkedText(allResults, false);
+  const textProcessingTime = performance.now() - textProcessingStart;
+  timings.textProcessing = textProcessingTime;
 
   // Optionally save the final output to a text file
   if (finalText && finalText !== "No readable content found") {
-    outputTextPath = imagePath.replace(/\.[^.]+$/, "_extracted_text.txt");
+    const fileIOStart = performance.now();
+    // Create datetime stamp for filename
+    const now = new Date();
+    const dateTime = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, -5); // Format: YYYY-MM-DD_HH-MM-SS
+    // Sanitize model name for filename (replace forward slashes and other invalid chars)
+    const sanitizedModel = model.replace(/[\/\\:*?"<>|]/g, '-');
+    // Extract filename without extension
+    const baseFilename = imagePath.replace(/\.[^.]+$/, '').split(/[\/\\]/).pop() || 'image';
+    outputTextPath = `${imagePath.split(/[\/\\]/).slice(0, -1).join('/')}/${dateTime}_${baseFilename}_${sanitizedModel}_extracted.txt`;
     await Deno.writeTextFile(outputTextPath, finalText);
+    timings.fileIO = performance.now() - fileIOStart;
     console.log(`Final text saved to: ${outputTextPath}`);
     success = true;
   }
@@ -116,19 +131,45 @@ try {
   timings.total = performance.now() - timings.totalStart;
 
   // Collect final GPU stats and merge with existing data
+  const finalStatsStart = performance.now();
   console.log("Calculating average performance stats from all chunks...");
   const finalGPUStats = await collectGPUStats(client);
+  timings.finalStats = performance.now() - finalStatsStart;
 
   // Calculate average stats from all chunk runs
   const averageStats = calculateAverageStats(chunkStats);
   const combinedGPUStats = { ...gpuStats, ...finalGPUStats, ...averageStats };
 
-  // Print performance metrics
+  // Print performance metrics with separated inference timing
+  const modelLoadingTime = combinedGPUStats.modelLoadingTime || 0;
+  // timings.apiRequest now contains only pure inference time (model loading excluded)
+  const pureInferenceTime = timings.apiRequest;
+  const totalAPITime = pureInferenceTime + modelLoadingTime;
+  
   console.log("\nPerformance Metrics:");
+  console.log(`- Initial Setup: ${timings.setup.toFixed(2)}ms`);
   console.log(`- Image Normalization: ${timings.normalization.toFixed(2)}ms`);
   console.log(`- Image Load & Encode: ${timings.imageLoad.toFixed(2)}ms`);
-  console.log(`- API Request & Parse: ${timings.apiRequest.toFixed(2)}ms`);
+  if (modelLoadingTime > 0) {
+    console.log(`- Model Loading: ${(modelLoadingTime / 1000).toFixed(2)}s (one-time cost)`);
+    console.log(`- Pure Inference: ${pureInferenceTime.toFixed(2)}ms (all chunks, excluding loading)`);
+  } else {
+    console.log(`- Model Loading: 0ms (already loaded)`);
+    console.log(`- Pure Inference: ${pureInferenceTime.toFixed(2)}ms (all chunks)`);
+  }
+  console.log(`- Text Processing: ${timings.textProcessing.toFixed(2)}ms`);
+  console.log(`- File I/O: ${timings.fileIO.toFixed(2)}ms`);
+  console.log(`- Final Stats Collection: ${timings.finalStats.toFixed(2)}ms`);
+  console.log(`- Total API Time: ${totalAPITime.toFixed(2)}ms (inference + model loading)`);
   console.log(`- Total Execution Time: ${timings.total.toFixed(2)}ms`);
+  
+  // Calculate and show unaccounted time
+  const accountedTime = timings.setup + timings.normalization + timings.imageLoad + 
+                       pureInferenceTime + timings.textProcessing + timings.fileIO + timings.finalStats;
+  const unaccountedTime = timings.total - accountedTime;
+  if (unaccountedTime > 5) { // Only show if significant (>5ms)
+    console.log(`- Unaccounted Time: ${unaccountedTime.toFixed(2)}ms`);
+  }
 
   // Show individual chunk performance summary
   showChunkPerformanceSummary();

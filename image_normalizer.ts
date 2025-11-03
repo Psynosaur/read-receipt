@@ -1,5 +1,7 @@
 import { Image } from "jsr:@matmen/imagescript";
 
+const MIN_CHUNK_HEIHGT = 200;
+
 /**
  * Image normalization options
  */
@@ -490,7 +492,7 @@ async function normalizeWithChunking(
     const actualChunkHeight = endY - startY;
 
     // Skip chunks that are too small to contain meaningful content
-    const minChunkHeight = Math.min(200, targetHeight * 0.3); // At least 200px or 30% of target height
+    const minChunkHeight = Math.min(MIN_CHUNK_HEIHGT, targetHeight * 0.3); // At least 200px or 30% of target height
     if (actualChunkHeight < minChunkHeight) {
       console.log(
         `  Skipping chunk ${

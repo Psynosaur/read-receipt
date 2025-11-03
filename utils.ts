@@ -1,5 +1,9 @@
 // utils.ts - Utility functions and types for the image parser
 import { LMStudioClient } from "@lmstudio/sdk";
+import { countOutputTokens, countPromptTokens } from "./token_utils.ts";
+
+// Re-export token counting functions
+export { countOutputTokens, countPromptTokens };
 
 /** Performance metrics for timing various operations during image processing */
 export const timings = {
@@ -8,6 +12,10 @@ export const timings = {
   normalization: 0,
   apiRequest: 0,
   total: 0,
+  setup: 0,
+  textProcessing: 0,
+  fileIO: 0,
+  finalStats: 0,
 };
 
 /**
@@ -39,13 +47,78 @@ export interface GPUStats {
   // Image-specific token metrics
   imageTokens?: number;
   textPromptTokens?: number;
+  // Model loading tracking
+  modelLoadingDetected?: boolean;
+  modelLoadingTime?: number;
+  modelLoadingStartTime?: string;
+  modelLoadingEndTime?: string;
 }
 
 /** Collect stats from each chunk run for performance analysis */
 export const chunkStats: GPUStats[] = [];
 
+/** Model loading tracking variables */
+const modelLoadingStats: {
+  detected: boolean;
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
+  startTimestamp?: string;
+  endTimestamp?: string;
+} = {
+  detected: false,
+};
+
 /** Combined GPU performance statistics */
 export const gpuStats: GPUStats = {};
+
+/**
+ * Get model handle with model loading time tracking
+ * @param client - LM Studio client instance
+ * @param model - Model identifier
+ * @returns Model handle and loading stats
+ */
+export async function getModelWithLoadingTracking(
+  client: LMStudioClient,
+  model: string,
+): Promise<{ modelHandle: Awaited<ReturnType<typeof client.llm.model>>; loadingStats: typeof modelLoadingStats }> {
+  // Check if model is already loaded
+  const loadedModels = await client.llm.listLoaded();
+  const isAlreadyLoaded = loadedModels.some(m => m.identifier === model);
+
+  if (isAlreadyLoaded) {
+    // Model is already loaded, no need to log this every time
+    return {
+      modelHandle: await client.llm.model(model, { verbose: false }),
+      loadingStats: { detected: false },
+    };
+  }
+
+  // Model is not loaded, track loading time
+  console.log(`Model ${model} not loaded, starting loading timer...`);
+  const loadingStart = performance.now();
+  const loadingStartTimestamp = new Date().toISOString();
+
+  // Get the model handle (this will trigger loading)
+  const modelHandle = await client.llm.model(model, { verbose: false });
+
+  const loadingEnd = performance.now();
+  const loadingEndTimestamp = new Date().toISOString();
+  const loadingDuration = loadingEnd - loadingStart;
+
+  const stats = {
+    detected: true,
+    startTime: loadingStart,
+    endTime: loadingEnd,
+    duration: loadingDuration,
+    startTimestamp: loadingStartTimestamp,
+    endTimestamp: loadingEndTimestamp,
+  };
+
+  console.log(`Model loading completed in ${(loadingDuration / 1000).toFixed(2)}s`);
+
+  return { modelHandle, loadingStats: stats };
+}
 
 /** Default VLM model for image processing */
 const DEFAULT_MODEL = "google/gemma-3-27b"; // Change to your preferred VLM model
@@ -453,6 +526,10 @@ export function displayGPUStats(
     outputTokens?: number;
     imageTokens?: number;
     textPromptTokens?: number;
+    modelLoadingDetected?: boolean;
+    modelLoadingTime?: number;
+    modelLoadingStartTime?: string;
+    modelLoadingEndTime?: string;
   },
 ) {
   if (Object.keys(combinedGPUStats).length > 0) {
@@ -471,37 +548,49 @@ export function displayGPUStats(
     const chunkSuffix = chunkStats.length > 1 ? ` (averaged across ${chunkStats.length} chunks)` : "";
     
     console.log(`LM Studio Performance Stats${chunkSuffix}: Model: ${modelName}, ${tokensPerSec} tok/sec, ${ttft} TTFT, ${genTime} generation time. Tokens: ${calculatedInputTokens} input (${textTokens} text + ${imageTokens} image) + ${outputTokens} output = ${totalTokens} total`);
+    
+    // Show model loading information if detected
+    if (combinedGPUStats.modelLoadingDetected && combinedGPUStats.modelLoadingTime) {
+      console.log(`Model Loading Time: ${(combinedGPUStats.modelLoadingTime / 1000).toFixed(2)}s`);
+    }
   } else {
     console.log("LM Studio Performance Stats: Unable to collect - Make sure LM Studio v0.3.10+ is running with a VLM model loaded");
   }
 }
 
 /**
- * Process and consolidate text results from multiple image chunks
- * Handles deduplication for multi-chunk images and formats final output
+ * Process and consolidate text results from multiple chunks
+ * Deduplicates content and provides performance feedback
  * 
- * @param allResults - Array of text extraction results from different image chunks
+ * @param allResults - Array of text results from all processed chunks
+ * @param showFullOutput - Whether to display the full consolidated text output
  * @returns Final consolidated text string
  * @example
  * ```typescript
  * const results = ["chunk1 text", "chunk2 text"];
- * const finalText = processChunkedText(results);
+ * const finalText = processChunkedText(results, false);
  * ```
  */
-export function processChunkedText(allResults: string[]) {
+export function processChunkedText(allResults: string[], showFullOutput = false) {
   let finalText = "";
   if (allResults.length > 1) {
     finalText = deduplicateAndMergeText(allResults);
-    console.log(`FINAL CONSOLIDATED OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters`);
-    console.log("=".repeat(50));
-    console.log(finalText);
-    console.log("=".repeat(50));
+    const tokenCount = countOutputTokens(finalText);
+    console.log(`FINAL CONSOLIDATED OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters, ${tokenCount} tokens`);
+    if (showFullOutput) {
+      console.log("=".repeat(50));
+      console.log(finalText);
+      console.log("=".repeat(50));
+    }
   } else if (allResults.length === 1) {
     finalText = allResults[0];
-    console.log(`FINAL OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters`);
-    console.log("=".repeat(50));
-    console.log(finalText);
-    console.log("=".repeat(50));
+    const tokenCount = countOutputTokens(finalText);
+    console.log(`FINAL OUTPUT: ${finalText.split("\n").length} lines, ${finalText.length} characters, ${tokenCount} tokens`);
+    if (showFullOutput) {
+      console.log("=".repeat(50));
+      console.log(finalText);
+      console.log("=".repeat(50));
+    }
   } else {
     console.log("No valid text content extracted from any chunk.");
     finalText = "No readable content found";
@@ -549,13 +638,22 @@ Extract all textual transcational information writing out put in plain text in o
     }
 
 IMPORTANT: If this image chunk contains mostly empty space, white background, or no readable receipt text, respond with "EMPTY_CHUNK" only.
-Only extract information that is clearly visible and relevant to this receipt transaction. NO HTML`;
+Only extract information that is clearly visible and relevant to this receipt transaction. 
+NO HTML output tags.`;
 
-    // Get the model handle
-    const modelHandle = await client.llm.model(model);
+    // Get the model handle with loading tracking
+    const { modelHandle, loadingStats } = await getModelWithLoadingTracking(client, model);
+    
+    // Store model loading stats in gpuStats if detected (only once)
+    if (loadingStats.detected) {
+      gpuStats.modelLoadingDetected = true;
+      gpuStats.modelLoadingTime = loadingStats.duration;
+      gpuStats.modelLoadingStartTime = loadingStats.startTimestamp;
+      gpuStats.modelLoadingEndTime = loadingStats.endTimestamp;
+    }
 
-    // Send request to LM Studio using the client - start timing
-    const apiStart = performance.now();
+    // IMPORTANT: Start inference timing AFTER model loading is complete
+    const inferenceStart = performance.now();
     const prediction = modelHandle.respond([
       { role: "user", content: prompt, images: [image] },
     ], {
@@ -566,9 +664,12 @@ Only extract information that is clearly visible and relevant to this receipt tr
     const response = await prediction;
     const content = response.content;
 
-    const apiDuration = performance.now() - apiStart;
+    // Calculate pure inference time (excluding model loading)
+    const pureInferenceTime = performance.now() - inferenceStart;
     const chunkDuration = performance.now() - chunkStart;
-    timings.apiRequest += apiDuration;
+    
+    // Add only the pure inference time to API request timing
+    timings.apiRequest += pureInferenceTime;
 
     // Get prediction stats from the response
     const stats = response.stats;
@@ -580,24 +681,39 @@ Only extract information that is clearly visible and relevant to this receipt tr
     // Use actual prompt token count from LM Studio API
     const actualPromptTokens = stats?.promptTokensCount || 0;
     
-    // Calculate token breakdown using known values from LM Studio debug logs
-    const estimatedTextTokens = Math.round(prompt.length / 4);
-    // From LM Studio debug logs: "Evaluated 259 tokens for image [idx: 4]"
-    const imageTokensPerImage = 259;
+    // Get accurate token breakdown using gpt-tokenizer
+    const accurateTextTokens = countPromptTokens(prompt);
     
-    // Use the actual breakdown: 
-    // - Image tokens are consistently 259 per image (from debug logs)
-    // - Text tokens can be calculated from total prompt tokens minus image tokens
+    // Get model-specific image token count
+    let imageTokensPerImage: number;
+    if (model.includes("gliese") || model.includes("qwen2vl")) {
+      imageTokensPerImage = 1372; // From debug logs: "Evaluated 1372 tokens for image"
+    } else if (model.includes("gemma-3")) {
+      imageTokensPerImage = 259; // From debug logs: "Evaluated 259 tokens for image"
+    } else {
+      // Default fallback, will be adjusted based on actual data
+      imageTokensPerImage = 259;
+    }
+    
     const actualImageTokens = imageTokensPerImage;
-    const actualTextTokens = actualPromptTokens > imageTokensPerImage 
+    
+    // Use the more accurate breakdown
+    const finalTextTokens = actualPromptTokens > imageTokensPerImage 
       ? actualPromptTokens - imageTokensPerImage
-      : estimatedTextTokens;
+      : accurateTextTokens;
+
+    // Log token accuracy for debugging
+    if (actualPromptTokens > 0) {
+      const estimatedTotal = accurateTextTokens + actualImageTokens;
+      const accuracy = estimatedTotal > 0 ? (1 - Math.abs(actualPromptTokens - estimatedTotal) / actualPromptTokens) * 100 : 0;
+      console.log(`  Token accuracy: ${accuracy.toFixed(1)}% (estimated: ${estimatedTotal}, actual: ${actualPromptTokens})`);
+    }
 
     const chunkStat: GPUStats = {
       // Use actual performance metrics from LM Studio
       tokensPerSecond: stats?.tokensPerSecond,
       timeToFirstToken: stats?.timeToFirstTokenSec,
-      generationTime: apiDuration,
+      generationTime: pureInferenceTime, // Pure inference time without model loading
       processingTime: chunkDuration, // Add the full chunk processing time
       stopReason: stats?.stopReason,
       // Token generation metrics - prefer actual over estimated
@@ -606,9 +722,9 @@ Only extract information that is clearly visible and relevant to this receipt tr
       promptTokens: actualPromptTokens,
       completionTokens: stats?.predictedTokensCount || estimatedTokensFromContent,
       totalTokens: stats?.totalTokensCount,
-      // Token breakdown using consistent logic
+      // Token breakdown using accurate counting
       imageTokens: actualImageTokens,
-      textPromptTokens: actualTextTokens,
+      textPromptTokens: finalTextTokens,
       inputTokens: actualPromptTokens,
       outputTokens: stats?.predictedTokensCount || estimatedTokensFromContent,
     };
@@ -621,7 +737,7 @@ Only extract information that is clearly visible and relevant to this receipt tr
       allResults.push(content);
       const tokensPerSec = stats?.tokensPerSecond?.toFixed(2) || "N/A";
       const ttft = stats?.timeToFirstTokenSec ? (stats.timeToFirstTokenSec * 1000).toFixed(0) + "ms" : "N/A";
-      console.log(`Processed chunk ${i + 1}/${imagesToProcess.length} (${currentImagePath}): ${tokensPerSec} tok/sec, ${ttft} TTFT, ${(apiDuration / 1000).toFixed(2)}s generation, ${content.length} chars extracted`);
+      console.log(`Processed chunk ${i + 1}/${imagesToProcess.length} (${currentImagePath}): ${tokensPerSec} tok/sec, ${ttft} TTFT, ${(pureInferenceTime / 1000).toFixed(2)}s inference, ${content.length} chars extracted`);
     } else {
       console.log(`Skipped chunk ${i + 1}/${imagesToProcess.length} (${currentImagePath}): Empty or invalid content`);
     }
