@@ -26,7 +26,7 @@ The system automatically tracks and stores comprehensive performance metrics in 
 - **Output Quality**: Lines, characters, success rate
 - **Configuration**: Model used, processing settings, file information
 
-### Viewing Metrics
+### Viewing Metrics (Tested on 2xRTX 3090 PCI-E3.0 x8)
 
 ```bash
 # Show all sessions summary
